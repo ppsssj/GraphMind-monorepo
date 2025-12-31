@@ -1,0 +1,19 @@
+@"
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+
+# backend (Gradle)
+backend/.gradle/
+backend/build/
+backend/out/
+backend/.env*
+"@ | Out-File -Encoding utf8 -Append .gitignore
