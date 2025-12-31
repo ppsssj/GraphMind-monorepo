@@ -1,0 +1,115 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background: #1f2430;
+  border-bottom: 1px solid #2a2f3a;
+  color: #c6d0f5;
+  font-size: 13px;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-label {
+  opacity: .85;
+  min-width: 64px;
+}
+
+.toolbar-input {
+  background: #0b0d12;
+  border: 1px solid #33415c;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  min-width: 240px;
+}
+
+.toolbar-range {
+  accent-color: #6039BC;
+}
+
+.toolbar-num {
+  width: 84px;
+  background: #0b0d12;
+  border: 1px solid #33415c;
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.toolbar-dash {
+  opacity: .7;
+}
+
+.toolbar-btn {
+  background: #33415c;
+  border: none;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.toolbar-btn:hover { background: #4461a0; }
+
+.toolbar-btn.ghost {
+  background: transparent;
+  border: 1px solid #33415c;
+}
+.toolbar-btn.ghost:hover {
+  background: #1f2738;
+}
+
+.toolbar-kv {
+  min-width: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* --- 2-row toolbar layout (added) --- */
+.toolbar {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-row + .toolbar-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toolbar-btn-group {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.toolbar-select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #161a22;
+  border: 1px solid #2a2f3a;
+  color: inherit;
+}
+
+.toolbar-btn.active {
+  border-color: rgba(120, 220, 255, 0.9);
+}
+
+.toolbar-warn {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #ffcc80;
+}

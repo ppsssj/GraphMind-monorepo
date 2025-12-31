@@ -1,0 +1,97 @@
+/* src/ui/ArrayToolbar.css */
+
+.array-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.array-toolbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 280px;
+}
+
+.array-toolbar-title {
+  font-weight: 700;
+}
+
+.array-toolbar-meta {
+  opacity: 0.85;
+  font-size: 12px;
+}
+
+.array-toolbar-dim {
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.array-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.array-toolbar-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.array-toolbar-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.array-toolbar-select,
+.array-toolbar-input {
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+  outline: none;
+}
+
+.array-toolbar-input {
+  width: 88px;
+}
+
+.array-toolbar-btn {
+  height: 32px;
+}
+/* --- Array3DToolBar extra meta styles --- */
+
+.array-toolbar-submeta {
+  font-size: 12px;
+  line-height: 1.25;
+  opacity: 0.78;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.array-toolbar-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.array-toolbar-warn {
+  font-size: 12px;
+  line-height: 1.25;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 200, 80, 0.12);
+  border: 1px solid rgba(255, 200, 80, 0.22);
+  opacity: 0.95;
+  white-space: nowrap;
+}

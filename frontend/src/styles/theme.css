@@ -1,0 +1,28 @@
+:root {
+  --bg: #0f1115;
+  --panel: #14141a;
+  --muted: #9aa1ad;
+  --text: #e9e9f0;
+  --accent: #9a6bff;
+  --accent-strong: #b388ff;
+  --border: #2a2a32;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, Pretendard, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+button {
+  cursor: pointer;
+}
