@@ -1,0 +1,464 @@
+/* ---------- Intro: Layout & Header ---------- */
+.intro-root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.intro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.brand-logo {
+  height: 30px;
+  width: auto;
+}
+.brand-name {
+  font-weight: 700;
+}
+.brand-sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: -2px;
+}
+
+.intro-nav{
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.nav-btn {
+  background-color: #0d071e;
+  border-radius : 5px;
+  font-size : 14px;
+  color : #dce1f5;
+  padding : 6px 12px;
+  
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 10px;
+}
+
+/* ---------- Hero ---------- */
+.intro-hero {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+.intro-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.intro-hero-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.hero-title {
+  font-size: clamp(36px, 5vw, 56px);
+  line-height: 1.1;
+  margin: 16px 0 8px;
+}
+.accent {
+  color: var(--accent);
+}
+.accent-strong {
+  color: var(--accent-strong);
+}
+
+.hero-sub {
+  color: var(--muted);
+  max-width: 720px;
+  margin-bottom: 24px;
+}
+
+.cta {
+  background: var(--accent);
+  border: none;
+  color: #100a1a;
+  font-weight: 700;
+  padding: 12px 18px;
+  border-radius: 12px;
+}
+
+/* ---------- Right: Image Area ---------- */
+.hero-image-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.hero-image {
+  display: block;
+  max-width: 340px;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  transition: transform 0.5s ease;
+}
+.hero-image:hover {
+  transform: scale(1.03);
+}
+
+/* ---------- Features ---------- */
+.features {
+  margin-top: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.features-flow {
+  font-size: 8px;
+  color: var(--muted);
+}
+.features h2 {
+  margin-bottom: 16px;
+}
+
+.feature-image {
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  margin-bottom: 24px;
+  transition: transform 0.5s ease;
+}
+.feature-image:hover {
+  transform: scale(1.02);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.feature-card {
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.feature-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background-color: #221b35;
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: #221b35;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.f-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.f-desc {
+  font-size: 12px;
+  color: #dce1f5;
+}
+
+/* Features #02 타이포 (inline 스타일 제거용) */
+.fs02-h2 {
+  font-size: 45px;
+}
+.fs02-h3 {
+  font-size: 40px;
+}
+.fs02-h4 {
+  color: #bcbcbc;
+}
+
+/* ---------- Use Cases: 카드 2열 + 배경이미지 + Hover 효과 ---------- */
+.UseCases-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+    margin-bottom: 40px;
+}
+@media (max-width: 900px) {
+  .UseCases-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.UseCases-card {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  background: transparent;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.2s ease, outline-color 0.2s ease, box-shadow 0.2s ease;
+}
+.UseCases-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+}
+.UseCases-card.active {
+  outline: 2px solid var(--accent, #8e7cff);
+  outline-offset: -2px;
+}
+
+.UseCases-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  transform: scale(1.03);
+  transition: filter 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+}
+.UseCases-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.1) 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  opacity: 0.85;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.UseCases-card:hover .UseCases-bg,
+.UseCases-card:focus-visible .UseCases-bg {
+  filter: blur(3px) brightness(0.7);
+  transform: scale(1.06);
+}
+.UseCases-card:hover::after,
+.UseCases-card:focus-visible::after {
+  opacity: 1;
+}
+
+.UseCases-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.UseCases-card .icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.UseCases-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.UseCases-title {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: 0.1px;
+}
+
+.UseCases-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.95);
+  max-width: 95%;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+@media (hover: hover) {
+  .UseCases-card:hover .UseCases-desc,
+  .UseCases-card:focus-visible .UseCases-desc {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (hover: none) {
+  .UseCases-desc {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .UseCases-card,
+  .UseCases-bg,
+  .UseCases-desc,
+  .UseCases-card::after {
+    transition: none;
+  }
+  .UseCases-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* ---------- Bottom CTA Banner ---------- */
+.cta-banner {
+  margin-top: 56px;
+  padding: 0 0 48px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cta-banner-inner {
+  margin-top: 24px;
+  padding: 28px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: radial-gradient(
+      120% 120% at 10% 0%,
+      rgba(142, 124, 255, 0.2) 0%,
+      rgba(142, 124, 255, 0.04) 50%,
+      rgba(142, 124, 255, 0) 70%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.08),
+      rgba(255, 255, 255, 0.02)
+    );
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.cta-kicker {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+  flex: 1 1 100%;
+}
+.cta-headline {
+  font-size: clamp(22px, 4.5vw, 34px);
+  font-weight: 800;
+  line-height: 1.2;
+}
+.cta-sub {
+  color: #d7daf0;
+  max-width: 560px;
+  line-height: 1.6;
+}
+.cta-large {
+  margin-left: auto;
+  background: var(--accent);
+  color: #100a1a;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 18px;
+  font-weight: 800;
+  font-size: 16px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+.cta-large:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(142, 124, 255, 0.35);
+  filter: brightness(1.03);
+}
+.cta-large:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.particle-layer {
+  position: fixed; /* 스크롤에도 고정 배경처럼 보이게 */
+  inset: 0;
+  z-index: 0;
+  pointer-events: none; /* 클릭 막지 않기 */
+}
+
+/* 콘텐츠는 배경 위에 오도록 */
+.intro-header,
+.intro-hero,
+.intro-footer {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* ---------- Footer ---------- */
+.intro-footer {
+  margin-top: auto;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+  letter-spacing: 0.02em;
+
+}
+
+/* ---------- Responsive: Feature 카드 수 줄이기 ---------- */
+@media (max-width: 900px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 520px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.howto-grid {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+
+.howto-text {
+  flex: 1;
+  color: #dce1f5;
+}
+
+.howto-graph {
+  flex: 1;
+  background: rgba(0,0,0,0.4);
+  border-radius: 12px;
+  padding: 8px;
+}
+.studio-demo-graph {
+  width: 340px;
+  height: 240px;
+  background: rgba(0,0,0,0.7);
+  border-radius: 12px;
+  overflow: hidden;
+}

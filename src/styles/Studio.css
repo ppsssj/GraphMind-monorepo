@@ -1,0 +1,442 @@
+.studio-root {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 100vh;
+}
+.left-panel {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow: auto;
+}
+.section {
+  margin-bottom: 18px;
+}
+.label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.input {
+  width: 100%;
+  background: #0f0f14;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.apply {
+  margin-top: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #0f0717;
+  font-weight: 700;
+}
+.equation {
+  background: #0f0f14;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.num {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0f0f14;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.dash {
+  color: var(--muted);
+}
+.range {
+  width: 100%;
+}
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+
+.canvas-wrap {
+  height: 100vh;
+}
+.pt-label {
+  background: rgba(10, 10, 16, 0.7);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+}
+/* ─────────────────────────────────────────────────────────────
+   VS Code 스타일의 두-페인 분할 레이아웃
+   ───────────────────────────────────────────────────────────── */
+.vscode-split-root {
+  display: flex;
+  height: calc(100vh - 64px); /* 상단 헤더가 있다면 여유 */
+  background: #0b0d12;        /* 캔버스 다크 배경과 자연스럽게 */
+  overflow: hidden;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* flex overflow 방지 */
+  border-right: 1px solid #191e27;
+}
+.pane:last-child {
+  border-right: none;
+}
+
+.pane-title {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: #1f2430;
+  color: #c6d0f5;
+  border-bottom: 1px solid #2a2f3a;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+}
+.pane-content { flex: 1; min-height: 0; display: flex; }
+.divider {
+  width: 20px;
+  cursor: col-resize;
+  background: linear-gradient(180deg, #2a2f3a, #222731);
+  box-shadow: inset 0 0 0 1px #111, inset 0 0 6px rgba(0,0,0,0.35);
+}
+.divider:hover {
+  background: rgba(96, 57, 188, 0.2); /* 시각적 피드백 */
+}
+.graph-view {
+  flex: 1;
+  display: flex;       /* LeftPanel + GraphCanvas */
+  min-height: 0;
+}
+
+/* LeftPanel 기본 폭/경계 (이미 클래스 존재 시 보완용) */
+.left-panel {
+  width: 260px;
+  background: #12151c;
+  border-right: 1px solid #2a2f3a;
+}
+
+
+/**/
+/* ========== 전체 레이아웃 ========== */
+.studio-root {
+  display: flex;
+  height: 100vh;
+  background: #0b0d12;
+  color: #dbe1ff;
+}
+
+.left-panel.explorer {
+  width: 240px;
+  background: #12151c;
+  border-right: 1px solid #202633;
+  padding: 12px;
+  overflow: auto;
+}
+
+.left-panel .section + .section { margin-top: 16px; }
+.left-panel .label { margin-bottom: 8px; font-size: 12px; opacity: .8; }
+.left-panel .note { margin-top: 12px; opacity: .7; font-size: 12px; line-height: 1.4; }
+
+.left-panel .btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid #33415c;
+  color: #c6d0f5;
+  background: transparent;
+}
+.left-panel .btn:hover { background: #1f2738; }
+.left-panel .btn.solid {
+  background: #33415c; color: #fff; border: none;
+}
+.left-panel .btn.solid:hover { background: #4461a0; }
+
+.quick-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+
+/* 오른쪽 메인 */
+.studio-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ========== 에디터(분할) ========== */
+.vscode-split-root {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid #191e27;
+}
+.pane:last-child { border-right: none; }
+
+.pane-title {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: #1f2430;
+  color: #c6d0f5;
+  border-bottom: 1px solid #2a2f3a;
+  font-size: 12px;
+  letter-spacing: .2px;
+}
+
+.graph-view { flex: 1; display: flex; min-height: 0; }
+
+.tabbar {
+  display: flex;
+  gap: 2px;
+  padding: 6px 6px 0 6px;
+  background: #151922;
+  border-bottom: 1px solid #202633;
+  min-height: 34px;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #1b2130;
+  color: #aab4cf;
+  border: 1px solid #263044;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  user-select: none;
+  cursor: grab;
+}
+.tab.active {
+  background: #222a3b;
+  color: #d9e0ff;
+  border-color: #33415c;
+  box-shadow: inset 0 -2px 0 #222a3b;
+}
+.tab:hover { color: #e2e8ff; }
+.tab .tab-title {
+  max-width: 200px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12px;
+}
+.tab .tab-close {
+  border: none; background: transparent; color: #9aa7c7; cursor: pointer;
+  font-size: 14px; line-height: 1;
+}
+.tab .tab-close:hover { color: #fff; }
+
+/* ── 우클릭 컨텍스트 메뉴 ───────────── */
+.context-menu {
+  background: #222a3b;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 13px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.context-menu .menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.context-menu .menu-item:hover {
+  background: #335;
+}
+
+
+.divider {
+  width: 6px; cursor: col-resize;
+  background: linear-gradient(180deg, #2a2f3a, #222731);
+  box-shadow: inset 0 0 0 1px #111, inset 0 0 6px rgba(0,0,0,.35);
+}
+
+/* 오른쪽 드롭존(분할 전엔 고스트) */
+.right-drop-zone { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+.split-ghost-drop {
+  width: 0; flex: 0 0 0; position: relative;
+}
+body.dragging-tab .split-ghost-drop {
+  width: 40%;
+  border-left: 1px dashed #2b3550;
+  border-right: 1px dashed #2b3550;
+  background: repeating-linear-gradient(
+    45deg, rgba(51,66,100,.12), rgba(51,66,100,.12) 6px,
+    rgba(51,66,100,.18) 6px, rgba(51,66,100,.18) 12px
+  );
+}
+
+.empty-hint {
+  color: #7f8db3;
+  padding: 12px;
+  font-size: 13px;
+}
+/* ===== Equations list in LeftPanel ===== */
+.eq-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.eq-item {
+  border: 1px solid #263044; border-radius: 8px; padding: 8px; background: #151922;
+}
+.eq-title { font-size: 13px; color: #e2e8ff; margin-bottom: 4px; }
+.eq-formula { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; font-size: 12px; opacity: .9; margin-bottom: 6px; }
+.eq-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.eq-tags .chip { font-size: 11px; padding: 2px 6px; border: 1px solid #33415c; border-radius: 999px; opacity: .85; }
+.eq-actions { display: flex; gap: 6px; }
+.eq-empty { opacity: .6; padding: 8px; font-size: 12px; }
+
+.left-panel .row { display: flex; }
+/* ===== Sparkline preview ===== */
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 40px;
+  border-radius: 6px;
+  margin: 6px 0 8px 0;
+}
+
+/* ===== Equations list (with sparkline) ===== */
+.eq-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.eq-item {
+  border: 1px solid #263044;
+  border-radius: 10px;
+  padding: 10px;
+  background: #151922;
+}
+.eq-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.eq-title { font-size: 13px; color: #e2e8ff; }
+.eq-updated { font-size: 11px; opacity: .7; }
+.eq-formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  font-size: 12px; opacity: .9; margin: 4px 0 6px 0;
+}
+.eq-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.eq-tags .chip {
+  font-size: 11px; padding: 2px 6px; border: 1px solid #33415c; border-radius: 999px; opacity: .85;
+}
+.eq-actions { display: flex; gap: 6px; }
+
+/* ===== Fade-down (Quick Picks reveal) ===== */
+.fade-down {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    max-height 320ms ease,
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+.fade-down.open {
+  max-height: 280px; /* 목록 길이에 맞춰 충분히 크게 */
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Quick list buttons keep existing styles from .left-panel .btn / .quick-list */
+/* ===== 드래그 프리뷰(탭이 따라오는 미니 박스) ===== */
+.drag-preview {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  padding: 6px 12px;
+  background: #222a3b;
+  color: #ffffff;
+  border: 1px solid #33415c;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ===== 드롭존 강조 ===== */
+/* 분할 전, 오른쪽 고스트 드롭영역: 드래깅 중에 크게 보이도록 */
+.split-ghost-drop {
+  width: 0;
+  flex: 0 0 0;
+  position: relative;
+  transition: all 0.2s ease;
+}
+body.dragging-tab .split-ghost-drop {
+  width: 42%;
+  border: 2px dashed #6039BC;
+  background: rgba(96,57,188,0.16);
+}
+.split-ghost-drop.drop-active {
+  border-color: #7f5cf1;
+  background: rgba(127,92,241,0.22);
+}
+/* 안내 문구 */
+body.dragging-tab .split-ghost-drop::after {
+  content: "Drop here to split";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #dbe1ff;
+  font-size: 13px;
+  letter-spacing: .2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* 분할 후, 오른쪽 Pane 드롭존 강조 */
+.right-drop-zone {
+  position: relative;
+}
+.right-drop-zone.drop-active {
+  outline: 2px solid #7f5cf1;
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px rgba(127,92,241,0.35);
+}
+.right-drop-zone.drop-active::after {
+  content: "Release to move tab";
+  position: absolute;
+  top: 8px; right: 8px;
+  background: rgba(17,19,27,0.8);
+  border: 1px solid #33415c;
+  color: #e8eaff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+/* (참고) 탭 드래그 중에 포인터 느낌 살짝 업 */
+body.dragging-tab .tabbar .tab { cursor: grabbing; }

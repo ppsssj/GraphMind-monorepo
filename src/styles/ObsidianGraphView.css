@@ -1,0 +1,194 @@
+/* 타임랩스 컨트롤 */
+.timelapse-controls {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(17, 19, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  color: #e5e7eb;
+  z-index: 5;
+  width: fit-content;
+  height: fit-content;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e5e7eb;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease,
+    transform 80ms ease;
+}
+.tl-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.tl-btn:active {
+  transform: translateY(1px);
+}
+.tl-btn.subtle {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tl-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 4px;
+}
+
+.tl-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.tl-speed input[type="range"] {
+  width: 120px;
+}
+.tl-speed span {
+  width: 34px;
+  text-align: right;
+}
+
+/* 진행바 */
+.tl-progress {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  min-width: 180px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.tl-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 0%;
+  background: linear-gradient(90deg, #6ee7b7, #60a5fa);
+}
+
+.tl-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #cbd5e1;
+  min-width: 150px;
+  justify-content: flex-end;
+}
+.tl-date {
+  color: #94a3b8;
+}
+
+.tl-toggle-btn,
+.tl-controls-panel {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.4s, transform 0.4s;
+}
+
+.fade-in-right {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fade-in-left {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fade-out-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  pointer-events: none;
+}
+
+.fade-out-right {
+  opacity: 0;
+  transform: translateX(40px);
+  pointer-events: none;
+}
+
+/* 범례(기존 스타일과 조화 가정) */
+.legend {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(17, 19, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  color: #e5e7eb;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+.legend .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.legend .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend .dot.note {
+  background: #6ee7b7;
+}
+.legend .dot.tag {
+  background: #60a5fa;
+}
+.legend .dot.curve {
+  background: #e54848;
+}
+.legend .row.toggle {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+}
+
+.legend .row.toggle.on {
+  opacity: 1;
+}
+
+.legend .row.toggle.off {
+  opacity: 0.25;
+}
+
+.legend .row.toggle:hover {
+  transform: translateY(-1px);
+}
+
+
+
+/* canvas 기본 inline 특성 때문에 생기는 여백/높이 흔들림 방지 */
+.graph-wrap canvas {
+  display: block;
+}

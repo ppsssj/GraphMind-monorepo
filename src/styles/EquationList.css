@@ -1,0 +1,356 @@
+:root {
+  --bg: #0f1115;
+  --panel: #111318;
+  --text: #e5e7eb;
+  --muted: #9aa4b2;
+  --border: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.06);
+  --active: rgba(110, 231, 183, 0.12);
+  --accent: #6ee7b7; /* note accent */
+  --tag: #60a5fa;    /* tag pill */
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* 컨테이너 */
+.vault-left {
+  display: flex;
+  flex-direction: column;
+  height: 100%;              /* 부모가 높이를 갖고 있어야 함 */
+  min-height: 0;             /* 자식 스크롤 살리기 */
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  color: var(--text);
+}
+
+/* 로고 영역 */
+.logo-container {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(17,19,24,0.96), rgba(17,19,24,0.88));
+  backdrop-filter: blur(4px);
+}
+
+.logo-image {
+  height: 24px;
+  width: 24px;
+}
+
+/* 상단 검색 영역 */
+.vault-left-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, rgba(17,19,24,0.96), rgba(17,19,24,0.88));
+  backdrop-filter: blur(4px);
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 검색 인풋 */
+.vault-search {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  margin-left : 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #0e1014;
+  color: var(--text);
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.vault-search::placeholder {
+  color: #7c8696;
+}
+
+.vault-search:focus {
+  border-color: rgba(110, 231, 183, 0.5);
+  box-shadow: 0 0 0 4px rgba(110, 231, 183, 0.12);
+  background: #0c0e12;
+}
+
+/* 리스트 영역 */
+.vault-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 8px 16px;
+}
+
+/* 스크롤바 (웹킷) */
+.vault-list::-webkit-scrollbar {
+  width: 10px;
+}
+.vault-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+.vault-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 아이템 카드 */
+.vault-item {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.vault-item + .vault-item {
+  margin-top: 8px;
+}
+
+.vault-item:hover {
+  background: var(--hover);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.vault-item:active {
+  transform: translateY(1px);
+}
+
+/* 활성 아이템 */
+.vault-item.active {
+  background: var(--active);
+  border-color: rgba(96, 58, 189, 0.5);
+  box-shadow: 0 0 0 4px rgba(110, 231, 183, 0.12);
+}
+
+/* 제목/수식/메타 */
+.vault-item .title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.15;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-item .formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #c6d0dd;
+  opacity: 0.95;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;        /* 두 줄까지만 표시 */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vault-item .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 태그 영역 */
+.vault-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vault-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  color: #dbebff;
+  background: rgba(96, 165, 250, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  user-select: none;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.vault-item.active .vault-tag {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.6);
+}
+
+.vault-tag:hover {
+  transform: translateY(-1px);
+}
+
+/* 반응형 여백 */
+@media (max-width: 640px) {
+  .vault-left-header {
+    padding: 10px;
+  }
+  .vault-list {
+    padding: 6px 6px 12px;
+  }
+  .vault-item {
+    border-radius: 12px;
+    padding: 10px;
+  }
+}
+.logo-fade,
+.search-fade,
+.search-icon-btn {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.4s, transform 0.4s;
+}
+
+.fade-in-left {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fade-out-right {
+  opacity: 0;
+  transform: translateX(40px);
+  pointer-events: none;
+}
+
+.fade-in-right {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fade-out-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  pointer-events: none;
+}
+
+/* ========== EquationList: type-aware styles ========== */
+
+/* 아이템 상단 영역: 아이콘 + 타이틀 */
+.item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  user-select: none;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+}
+
+.item-icon.eq {
+  color: #c7f7e3;
+  background: rgba(110, 231, 183, 0.08);
+  border-color: rgba(110, 231, 183, 0.35);
+}
+.item-icon.arr {
+  color: #dbebff;
+  background: rgba(96, 165, 250, 0.12);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.item-title-wrap { flex: 1; min-width: 0; }
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  opacity: 0.9;
+}
+
+.pill-eq {
+  color: #8fe9c7;
+  background: rgba(110, 231, 183, 0.08);
+  border-color: rgba(110, 231, 183, 0.35);
+}
+.pill-arr {
+  color: rgb(245, 158, 11);
+  background-color: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+/* 수식/배열 서브라인 */
+.dims {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #c6d0dd;
+  opacity: 0.95;
+}
+
+/* array3d 아이콘 (주황 계열) */
+.item-icon.arr {
+  color: rgb(245, 158, 11);                           /* 아이콘 색 */
+  background-color: rgba(245, 158, 11, 0.08);         /* 은은한 주황 배경 */
+  border: 1px solid rgba(245, 158, 11, 0.6);          /* 살짝 진한 테두리 */
+}
+
+/* hover 시 약간 강조해도 됨 */
+.item-icon.arr:hover {
+  background-color: rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.4);
+}
+
+
+/* curve3d 아이콘 전용 스타일 */
+.item-icon.curve {
+  color: #e54848;              /* 아이콘 선 색 (currentColor) */
+  background-color: rgba(229, 72, 72, 0.08);  /* 살짝 붉은 배경 */
+  border: 1px solid rgba(229, 72, 72, 0.6);   /* 테두리도 빨간 계열 */
+}
+
+/* 혹시 hover 효과도 줄 거라면 */
+.item-icon.curve:hover {
+  background-color: rgba(229, 72, 72, 0.14);
+  box-shadow: 0 0 0 1px rgba(229, 72, 72, 0.4);
+}
+
+.pill-curve {
+  color: #e54848;
+  background-color: rgba(229, 72, 72, 0.08);
+  border-color: rgba(229, 72, 72, 0.6);
+}
+
+/* surface3d 전용 아이콘 배경 */
+.item-icon.surface {
+  background: rgba(168, 85, 247, 0.12); /* 보라 글로우 */
+  color: #e9d5ff;
+  border: 1px solid rgba(168, 85, 247, 0.7);
+}
+
+/* surface3d 타입 pill */
+.type-pill.pill-surface {
+  border-color: rgba(168, 85, 247, 0.8);
+  background: rgba(168, 85, 247, 0.16);
+  color: #f5e9ff;
+}

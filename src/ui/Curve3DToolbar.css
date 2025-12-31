@@ -1,0 +1,44 @@
+/* src/ui/Curve3DToolbar.css */
+
+.curve3d-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.curve3d-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.curve3d-toolbar-title {
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.curve3d-toolbar-fields {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 520px;
+}
+
+.curve3d-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.curve3d-field-small .toolbar-input {
+  width: 90px;
+}
+
+.curve3d-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
