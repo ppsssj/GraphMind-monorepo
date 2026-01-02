@@ -1,3 +1,4 @@
+
 // src/components/EquationList.jsx
 import React, { useMemo, useRef, useState } from "react";
 import "../styles/EquationList.css";
@@ -12,18 +13,14 @@ function Curve3DIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {/* X-Y 축 */}
         <polyline points="4,19 4,6 18,6" opacity="0.7" />
-        {/* 3D 곡선 */}
         <path d="M5 16 C8 10 12 13 17 7" />
-        {/* Z축 느낌 (대각선) */}
         <path d="M7 18 L11 22 L20 13" opacity="0.5" />
       </g>
     </svg>
   );
 }
 
-/** ✅ 새로 추가: 3D Surface 아이콘 (보라 계열) */
 function Surface3DIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -34,11 +31,9 @@ function Surface3DIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {/* 바닥 평면 (격자) */}
         <path d="M3 16 L9 20 L21 14 L15 10 Z" opacity="0.55" />
         <path d="M9 20 L9 13 L3 9" opacity="0.4" />
         <path d="M15 10 L15 17 L21 14" opacity="0.4" />
-        {/* 곡면 실루엣 */}
         <path d="M4 13 C8 9 12 11 16 8 C18 7 20 7.5 21 9" />
       </g>
     </svg>
@@ -51,11 +46,16 @@ export default function EquationList({
   query,
   setQuery,
   onSelect,
-  onUpdate, // ✅ 추가
-  onDelete, // ✅ 추가
+  onUpdate,
+  onDelete,
 }) {
   // ---- helpers -------------------------------------------------
+  // ✅ 백엔드가 summary로 줄 때 content가 없을 수 있으므로 dims는 안전 처리
   const dimsOf = (note) => {
+    // 서버가 dims/shape를 주는 케이스 대비
+    if (typeof note?.dims === "string" && note.dims.trim()) return note.dims.trim();
+    if (typeof note?.shape === "string" && note.shape.trim()) return note.shape.trim();
+
     if (note?.type !== "array3d" || !Array.isArray(note?.content)) return "";
     const Z = note.content.length;
     const Y = note.content[0]?.length || 0;
@@ -65,25 +65,49 @@ export default function EquationList({
 
   const iconOf = (type) => {
     if (type === "array3d") return "⬢";
-    if (type === "curve3d") return ""; // icon은 별도 컴포넌트
-    if (type === "surface3d") return ""; // icon은 별도 컴포넌트
+    if (type === "curve3d") return "";
+    if (type === "surface3d") return "";
     return "ƒx";
   };
 
-  // ---- filtering (수식 + 배열 + surface까지 검색) --------------
+  // ✅ 날짜 포맷 안전 처리
+  const whenOf = (note) => {
+    const raw = note?.updatedAt || note?.createdAt;
+    if (!raw) return "";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString();
+  };
+
+  // ✅ equation은 formula 또는 expr 둘 중 하나로 올 수 있음
+  const eqTextOf = (note) => (note?.formula || note?.expr || "").toString();
+
+  // ✅ curve3d는 xExpr/yExpr/zExpr (혹은 x/y/z) 로 올 수 있음
+  const curveTextOf = (note) => {
+    const x = note?.xExpr ?? note?.x ?? "";
+    const y = note?.yExpr ?? note?.y ?? "";
+    const z = note?.zExpr ?? note?.z ?? "";
+    // 너무 길면 검색용으로만 쓰고 subtitle은 samples 위주로
+    return `${x} ${y} ${z}`.trim();
+  };
+
+  // ---- filtering ----------------------------------------------
   const filtered = useMemo(() => {
     const q = (query || "").trim().toLowerCase();
     if (!q) return items;
 
     return items.filter((n) => {
       const title = (n.title || "").toLowerCase();
-      const formula = (n.formula || "").toLowerCase();
-      const expr = (n.expr || "").toLowerCase(); // ✅ surface3d용
-      const tags = (n.tags || []).join(" ").toLowerCase();
       const type = (n.type || "").toLowerCase();
+      const tags = (n.tags || []).join(" ").toLowerCase();
+
+      const formula = (n.formula || "").toLowerCase();
+      const expr = (n.expr || "").toLowerCase();
+
+      const curveExpr = curveTextOf(n).toLowerCase();
       const dims = n.type === "array3d" ? dimsOf(n).toLowerCase() : "";
-      // 제목 / 수식 / expr / 태그 / 타입 / 배열 크기 문자열까지 검색
-      return [title, formula, expr, tags, type, dims].some((s) =>
+
+      return [title, type, tags, formula, expr, curveExpr, dims].some((s) =>
         s.includes(q)
       );
     });
@@ -112,7 +136,8 @@ export default function EquationList({
     setEditing({
       id: note.id,
       title: note.title || "",
-      formula: note.type === "equation" ? note.formula || "" : "",
+      // ✅ equation만 formula 편집 허용(요구사항 반영)
+      formula: note.type === "equation" ? eqTextOf(note) : "",
       tags: (note.tags || []).join(", "),
     });
   };
@@ -120,7 +145,8 @@ export default function EquationList({
   const cancelEdit = () => setEditing(null);
 
   const saveEdit = () => {
-    if (!editing || !onUpdate) return;
+    if (!editing || typeof onUpdate !== "function") return;
+
     const note = items.find((n) => n.id === editing.id);
     if (!note) return;
 
@@ -135,8 +161,9 @@ export default function EquationList({
       tags,
     };
 
+    // ✅ equation이면 formula도 함께 patch (백엔드 meta patch가 지원하는 형태로)
     if (note.type === "equation") {
-      patch.formula = (editing.formula || "").trim() || note.formula;
+      patch.formula = (editing.formula || "").trim() || eqTextOf(note);
     }
 
     onUpdate(editing.id, patch);
@@ -244,7 +271,7 @@ export default function EquationList({
           <input
             ref={inputRef}
             className="vault-search"
-            placeholder="Search equations/arrays, formulas, tags..."
+            placeholder="Search title, expr/formula, tags..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onBlur={handleBlur}
@@ -294,22 +321,20 @@ export default function EquationList({
           const isSurface = note.type === "surface3d";
           const dims = isArr ? dimsOf(note) : null;
 
-          // ✅ 서브타이틀: 타입별 다르게
-          let subtitle;
+          // ✅ 서브타이틀: 백엔드 요약/전체 어느 쪽이 와도 안전
+          let subtitle = "";
           if (isArr) {
-            subtitle = `Size: ${dims}`;
+            subtitle = `Size: ${dims || "-"}`;
           } else if (isCurve) {
             subtitle = `samples: ${note.samples ?? "-"}`;
           } else if (isSurface) {
-            const expr = note.expr || note.formula || "";
+            const expr = (note.expr || note.formula || "").toString();
             subtitle = expr ? `z = ${expr}` : "z = f(x, y)";
           } else {
-            subtitle = note.formula || "";
+            subtitle = eqTextOf(note);
           }
 
-          const when = new Date(
-            note.updatedAt || note.createdAt || Date.now()
-          ).toLocaleString();
+          const when = whenOf(note);
           const isActive = note.id === activeId;
           const isEditing = editing && editing.id === note.id;
           const canEdit = typeof onUpdate === "function";
@@ -324,13 +349,7 @@ export default function EquationList({
               <div className="item-head">
                 <div
                   className={`item-icon ${
-                    isArr
-                      ? "arr"
-                      : isCurve
-                      ? "curve"
-                      : isSurface
-                      ? "surface"
-                      : "eq"
+                    isArr ? "arr" : isCurve ? "curve" : isSurface ? "surface" : "eq"
                   }`}
                 >
                   {isCurve ? (
@@ -341,6 +360,7 @@ export default function EquationList({
                     iconOf(note.type)
                   )}
                 </div>
+
                 <div className="item-title-wrap">
                   <div className="title-row">
                     <div className="title">
@@ -353,33 +373,21 @@ export default function EquationList({
                           ? "3D Surface"
                           : "Equation")}
                     </div>
+
                     <span
                       className={`type-pill ${
-                        isArr
-                          ? "pill-arr"
-                          : isCurve
-                          ? "pill-curve"
-                          : isSurface
-                          ? "pill-surface"
-                          : "pill-eq"
+                        isArr ? "pill-arr" : isCurve ? "pill-curve" : isSurface ? "pill-surface" : "pill-eq"
                       }`}
                     >
-                      {isArr
-                        ? "array3d"
-                        : isCurve
-                        ? "curve3d"
-                        : isSurface
-                        ? "surface3d"
-                        : "equation"}
+                      {note.type || "equation"}
                     </span>
                   </div>
+
                   <div className={isArr ? "dims" : "formula"}>{subtitle}</div>
                 </div>
               </div>
 
-              <div className="meta">
-                <span>{when}</span>
-              </div>
+              <div className="meta">{when ? <span>{when}</span> : null}</div>
 
               <div className="vault-tags" style={{ marginTop: 6 }}>
                 {(note.tags || []).map((t) => (
@@ -389,7 +397,6 @@ export default function EquationList({
                 ))}
               </div>
 
-              {/* 편집 / 삭제 액션 */}
               {(canEdit || canDelete) && (
                 <div
                   style={{
@@ -431,7 +438,7 @@ export default function EquationList({
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDelete && onDelete(note.id);
+                        onDelete?.(note.id);
                       }}
                     >
                       삭제
@@ -440,7 +447,6 @@ export default function EquationList({
                 </div>
               )}
 
-              {/* 인라인 편집 패널 */}
               {canEdit && isEditing && (
                 <div
                   style={{
@@ -452,18 +458,13 @@ export default function EquationList({
                   }}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div
-                    style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                  >
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <label style={{ fontSize: 11, color: "#9aa4b2" }}>
                       제목
                       <input
                         value={editing.title}
                         onChange={(e) =>
-                          setEditing((prev) => ({
-                            ...prev,
-                            title: e.target.value,
-                          }))
+                          setEditing((prev) => ({ ...prev, title: e.target.value }))
                         }
                         style={{
                           marginTop: 2,
@@ -485,10 +486,7 @@ export default function EquationList({
                         <input
                           value={editing.formula}
                           onChange={(e) =>
-                            setEditing((prev) => ({
-                              ...prev,
-                              formula: e.target.value,
-                            }))
+                            setEditing((prev) => ({ ...prev, formula: e.target.value }))
                           }
                           style={{
                             marginTop: 2,
@@ -512,10 +510,7 @@ export default function EquationList({
                       <input
                         value={editing.tags}
                         onChange={(e) =>
-                          setEditing((prev) => ({
-                            ...prev,
-                            tags: e.target.value,
-                          }))
+                          setEditing((prev) => ({ ...prev, tags: e.target.value }))
                         }
                         style={{
                           marginTop: 2,
@@ -574,10 +569,9 @@ export default function EquationList({
             </div>
           );
         })}
+
         {filtered.length === 0 && (
-          <div style={{ opacity: 0.6, padding: 12, fontSize: 13 }}>
-            No results
-          </div>
+          <div style={{ opacity: 0.6, padding: 12, fontSize: 13 }}>No results</div>
         )}
       </div>
     </div>

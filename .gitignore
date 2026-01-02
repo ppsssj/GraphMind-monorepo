@@ -1,19 +1,25 @@
-@"
-
 # OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
 *.iml
+.vscode/
+
+# Logs
+*.log
+
+# env (root 포함)
+.env*
+!.env.example
 
 # frontend
 frontend/node_modules/
 frontend/dist/
-frontend/.env*
 
 # backend (Gradle)
 backend/.gradle/
 backend/build/
 backend/out/
-backend/.env*
-"@ | Out-File -Encoding utf8 -Append .gitignore
+
+# backend local data
+backend/data/

@@ -1,14 +1,17 @@
 import { useNavigate } from "react-router-dom";
 import "../styles/Intro.css";
+import LoginModal from "../ui/LoginModal";
 import { useState, useRef } from "react";
 import ParticleBackground from "../components/ParticleBackground";
 import MiniVaultDemo from "../components/MiniVaultDemo";
 import Plot from "react-plotly.js";
 import GraphCanvas from "../ui/GraphCanvas";
+import { getToken } from "../api/apiClient";
 export default function Intro() {
   const nav = useNavigate();
   const [activeIdx, setActiveIdx] = useState(null);
   const demoRef = useRef(null);
+  const [loginOpen, setLoginOpen] = useState(false);
   // 카드에서 사용할 데이터 (배경 이미지 + 설명 포함) - Intro.jsx 안의 useCases를 이걸로 교체
   const useCases = [
     {
@@ -86,8 +89,11 @@ export default function Intro() {
             Get Started
           </button>
         </nav>
-        {/* 추후 로그인 기능 추가 시 활성화 */}
-        <button className="ghost">Login</button>
+        <button className="ghost" onClick={() => setLoginOpen(true)}>
+          Login
+        </button>
+
+        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </header>
 
       {/* Hero */}
@@ -109,7 +115,14 @@ export default function Intro() {
               Realize your mathematical imagination in{" "}
               <span className="accent-strong">real-time 3D</span>.
             </p>
-            <button className="cta" onClick={() => nav("/vault")}>
+            <button
+              className="cta"
+              onClick={() => {
+                const t = getToken();
+                if (!t) return setLoginOpen(true);
+                nav("/vault");
+              }}
+            >
               Start
             </button>
           </div>
@@ -324,7 +337,14 @@ export default function Intro() {
               Draw your space with a single equation. <br />
               Explore, learn, and create in real-time 3D.
             </p>
-            <button className="cta" onClick={() => nav("/vault")}>
+            <button
+              className="nav-btn"
+              onClick={() =>
+                document
+                  .getElementById("cta-head")
+                  .scrollIntoView({ behavior: "smooth" })
+              }
+            >
               Get Started
             </button>
           </div>

@@ -1,45 +1,15 @@
 // src/pages/Vault.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import EquationList from "../components/EquationList";
 import ObsidianGraphView from "../components/ObsidianGraphView";
-import { dummyResources } from "../data/dummyEquations";
 import NewResourceModal from "../components/NewResourceModal";
 import "../styles/Vault.css";
-
-const LS_KEY_NEW = "vaultResources";
-const LS_KEY_OLD = "equationVault";
-
-function migrateEquationsToResources(arr) {
-  if (!Array.isArray(arr)) return [];
-  return arr.map((n) =>
-    n.type
-      ? n
-      : {
-          id: n.id,
-          type: "equation",
-          title: n.title || "Untitled",
-          formula: n.formula || "x",
-          tags: n.tags || [],
-          links: n.links || [],
-          updatedAt: n.updatedAt || new Date().toISOString(),
-          createdAt: n.createdAt || new Date().toISOString(),
-        }
-  );
-}
-
-// ✅ 타입 정규화 (옛날 equation3d → surface3d)
-function normalizeResourceType(n) {
-  if (!n) return n;
-  if (n.type === "equation3d") {
-    return { ...n, type: "surface3d" };
-  }
-  return n;
-}
+import { api } from "../api/apiClient";
 
 export default function Vault() {
   const navigate = useNavigate();
-  const location = useLocation();
+
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -48,81 +18,41 @@ export default function Vault() {
   const [showNew, setShowNew] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
 
-  useEffect(() => {
-    // auto-clear when visiting /vault?clearVault=1
-    try {
-      const params = new URLSearchParams(location.search);
-      const shouldClear = params.get("clearVault");
-      if (shouldClear) {
-        if (
-          !window.confirm(
-            "Clear vault cache (localStorage) and reload demo data?"
-          )
-        ) {
-          navigate("/vault", { replace: true });
-          return;
-        }
-        try {
-          localStorage.removeItem(LS_KEY_NEW);
-          localStorage.removeItem(LS_KEY_OLD);
-        } catch (e) {
-          console.error("Failed to clear localStorage keys:", e);
-        }
-        const seeded = dummyResources.map(normalizeResourceType);
-        localStorage.setItem(LS_KEY_NEW, JSON.stringify(seeded));
-        setNotes(seeded);
-        setActiveId(seeded[0]?.id || null);
-        setFocusTick((t) => t + 1);
-        navigate("/vault", { replace: true });
-        return;
-      }
-    } catch (e) {
-      // ignore URL parse errors
-    }
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-    // 1) 새 저장 키 우선
-    const newStr = localStorage.getItem(LS_KEY_NEW);
-    if (newStr) {
-      try {
-        const parsed = JSON.parse(newStr);
-        if (Array.isArray(parsed) && parsed.length) {
-          const normalized = parsed.map(normalizeResourceType);
-          setNotes(normalized);
-          setActiveId(normalized[0].id);
-          return;
-        }
-      } catch {}
+  const fetchVault = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      // ✅ studio 이동에 필요한 필드까지 포함하려면 full 권장
+      const items = await api.listVaultItems();
+
+      setNotes(Array.isArray(items) ? items : []);
+      setActiveId(items?.[0]?.id ?? null);
+      setFocusTick((t) => t + 1);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setError(msg);
+
+      if (msg === "UNAUTHORIZED") {
+        // 토큰 없거나 만료 → intro로 보내거나 로그인 유도
+        navigate("/", { replace: true });
+      }
+    } finally {
+      setLoading(false);
     }
-    // 2) 구 키가 있으면 마이그레이션
-    const oldStr = localStorage.getItem(LS_KEY_OLD);
-    if (oldStr) {
-      try {
-        const parsedOld = JSON.parse(oldStr);
-        const migrated = migrateEquationsToResources(parsedOld).map(
-          normalizeResourceType
-        );
-        localStorage.setItem(LS_KEY_NEW, JSON.stringify(migrated));
-        setNotes(migrated);
-        setActiveId(migrated[0]?.id || null);
-        return;
-      } catch {}
-    }
-    // 3) 아무 것도 없으면 데모(수식+배열) 시드
-    const seeded = dummyResources.map(normalizeResourceType);
-    localStorage.setItem(LS_KEY_NEW, JSON.stringify(seeded));
-    setNotes(seeded);
-    setActiveId(seeded[0]?.id || null);
-  }, [location.search, navigate]);
+  }, [navigate]);
+
+  useEffect(() => {
+    fetchVault();
+  }, [fetchVault]);
 
   const activeNote = useMemo(
     () => notes.find((n) => n.id === activeId) || null,
     [notes, activeId]
   );
-
-  const save = (next) => {
-    setNotes(next);
-    localStorage.setItem(LS_KEY_NEW, JSON.stringify(next));
-  };
 
   const handleOpenStudio = (id) => {
     const note = notes.find((n) => n.id === id);
@@ -132,12 +62,15 @@ export default function Vault() {
       navigate("/studio", {
         state: {
           type: "equation",
-          formula: note.formula,
+          formula: note.formula ?? note.expr ?? "x",
           from: "vault",
           id: note.id,
         },
       });
-    } else if (note.type === "array3d") {
+      return;
+    }
+
+    if (note.type === "array3d") {
       navigate("/studio", {
         state: {
           type: "array3d",
@@ -146,7 +79,10 @@ export default function Vault() {
           id: note.id,
         },
       });
-    } else if (note.type === "curve3d") {
+      return;
+    }
+
+    if (note.type === "curve3d") {
       navigate("/studio", {
         state: {
           type: "curve3d",
@@ -163,7 +99,10 @@ export default function Vault() {
           },
         },
       });
-    } else if (note.type === "surface3d" || note.type === "equation3d") {
+      return;
+    }
+
+    if (note.type === "surface3d") {
       const xRange = note.xRange || [];
       const yRange = note.yRange || [];
       const xMin = note.xMin ?? xRange[0] ?? -5;
@@ -191,12 +130,135 @@ export default function Vault() {
     }
   };
 
-  const importDummy = () => {
-    const seeded = dummyResources.map(normalizeResourceType);
-    localStorage.setItem(LS_KEY_NEW, JSON.stringify(seeded));
-    setNotes(seeded);
-    setActiveId(seeded[0]?.id || null);
-    setFocusTick((t) => t + 1);
+  // ✅ 생성: NewResourceModal → 서버에 POST → 목록 갱신
+  const onCreateResource = async (payload) => {
+    try {
+      setLoading(true);
+      setError("");
+
+      // payload 구조는 기존 그대로 쓰되, 서버로 보낼 형태만 정리
+      const {
+        type,
+        title,
+        formula,
+        tags,
+        content,
+        x,
+        y,
+        z,
+        tRange,
+        samples,
+        xRange,
+        yRange,
+        ...rest
+      } = payload;
+
+      const resolvedType = type === "equation3d" ? "surface3d" : type;
+
+      let body = {
+        type: resolvedType,
+        title: title || "Untitled",
+        tags: Array.isArray(tags) ? tags : [],
+        ...rest,
+      };
+
+      if (resolvedType === "equation") {
+        body.formula = formula || "x^2+1";
+      } else if (resolvedType === "curve3d") {
+        body.xExpr = x || "cos(t)";
+        body.yExpr = y || "sin(t)";
+        body.zExpr = z || "t";
+        body.tMin = Array.isArray(tRange) ? tRange[0] : 0;
+        body.tMax = Array.isArray(tRange) ? tRange[1] : 2 * Math.PI;
+        body.samples = samples ?? 400;
+      } else if (resolvedType === "surface3d") {
+        const xr =
+          Array.isArray(xRange) && xRange.length === 2 ? xRange : [-5, 5];
+        const yr =
+          Array.isArray(yRange) && yRange.length === 2 ? yRange : [-5, 5];
+        body.expr = formula || "sin(x)*cos(y)";
+        body.xMin = xr[0];
+        body.xMax = xr[1];
+        body.yMin = yr[0];
+        body.yMax = yr[1];
+        body.samples = samples ?? 80;
+      } else if (resolvedType === "array3d") {
+        body.content = content || [[[0]]];
+      }
+
+      const created = await api.createVaultItem(body);
+
+      // 상태 업데이트: 서버가 생성된 item 반환한다는 가정 (현재 백엔드 구현 스타일상 그럴 확률 높음)
+      setNotes((prev) => {
+        const next = [...prev, created];
+        return next;
+      });
+      setActiveId(created?.id ?? null);
+      setShowNew(false);
+      setFocusTick((t) => t + 1);
+
+      // 생성 후 바로 Studio 이동(기존 UX 유지)
+      if (created?.id) handleOpenStudio(created.id);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ 수정: 제목/태그(+equation이면 formula) → PATCH meta
+  const handleUpdateNote = async (id, patch) => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const updated = await api.patchVaultMeta(id, patch);
+
+      setNotes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, ...updated } : n))
+      );
+      setFocusTick((t) => t + 1);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ 삭제: DELETE
+  const handleDeleteNote = async (id) => {
+    const target = notes.find((n) => n.id === id);
+    if (!target) return;
+
+    if (
+      !window.confirm(
+        `"${target.title || "Untitled"}" 노트를 삭제하시겠습니까?`
+      )
+    )
+      return;
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await api.deleteVaultItem(id);
+
+      setNotes((prev) => {
+        const next = prev.filter((n) => n.id !== id);
+        if (activeId === id) {
+          setActiveId(next[0]?.id ?? null);
+          setFocusTick((t) => t + 1);
+        }
+        return next;
+      });
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const exportJson = () => {
@@ -215,191 +277,6 @@ export default function Vault() {
     } catch (e) {
       console.error("Export failed:", e);
     }
-  };
-
-  // NewResourceModal → Vault 저장
-  const onCreateResource = (payload) => {
-    const {
-      type,
-      title,
-      formula,
-      content,
-      tags,
-      x,
-      y,
-      z,
-      tRange,
-      samples,
-      xRange,
-      yRange,
-      ...rest
-    } = payload;
-
-    const resolvedType = type === "equation3d" ? "surface3d" : type;
-    const id = Date.now().toString(36);
-
-    const base = {
-      id,
-      type: resolvedType,
-      title:
-        title ||
-        (resolvedType === "equation"
-          ? "New Equation"
-          : resolvedType === "surface3d"
-          ? "New 3D Surface"
-          : resolvedType === "curve3d"
-          ? "New 3D Curve"
-          : resolvedType === "array3d"
-          ? "New 3D Array"
-          : "New Resource"),
-      tags: Array.isArray(tags) ? tags : [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      ...rest,
-    };
-
-    let item;
-
-    if (resolvedType === "equation") {
-      item = {
-        ...base,
-        formula: formula || "x^2+1",
-      };
-    } else if (resolvedType === "curve3d") {
-      item = {
-        ...base,
-        x: x || "cos(t)",
-        y: y || "sin(t)",
-        z: z || "t",
-        tRange: Array.isArray(tRange) ? tRange : [0, 2 * Math.PI],
-        samples: samples ?? 400,
-      };
-    } else if (resolvedType === "surface3d") {
-      const xr = Array.isArray(xRange) && xRange.length === 2 ? xRange : [-5, 5];
-      const yr = Array.isArray(yRange) && yRange.length === 2 ? yRange : [-5, 5];
-      item = {
-        ...base,
-        expr: formula || "sin(x)*cos(y)",
-        xRange: xr,
-        yRange: yr,
-        samples: samples ?? 80,
-      };
-    } else if (resolvedType === "array3d") {
-      item = {
-        ...base,
-        content: content || [[[0]]],
-      };
-    } else {
-      // surfaceParam / vectorField 등은 우선 메타만 저장
-      item = {
-        ...base,
-        formula: formula || "",
-        content: content,
-      };
-    }
-
-    const next = [...notes, item];
-    save(next);
-    setActiveId(id);
-    setShowNew(false);
-
-    // 생성 후 바로 Studio 이동
-    if (resolvedType === "equation") {
-      navigate("/studio", {
-        state: {
-          type: "equation",
-          formula: item.formula,
-          from: "vault",
-          id,
-        },
-      });
-    } else if (resolvedType === "curve3d") {
-      navigate("/studio", {
-        state: {
-          type: "curve3d",
-          id,
-          title: item.title,
-          from: "vault",
-          curve3d: {
-            xExpr: item.x,
-            yExpr: item.y,
-            zExpr: item.z,
-            tMin: item.tRange?.[0],
-            tMax: item.tRange?.[1],
-            samples: item.samples,
-          },
-        },
-      });
-    } else if (resolvedType === "surface3d") {
-      const [xMin, xMax] = item.xRange || [-5, 5];
-      const [yMin, yMax] = item.yRange || [-5, 5];
-      navigate("/studio", {
-        state: {
-          type: "surface3d",
-          id,
-          title: item.title,
-          from: "vault",
-          surface3d: {
-            expr: item.expr,
-            xMin,
-            xMax,
-            yMin,
-            yMax,
-            nx: item.samples ?? 80,
-            ny: item.samples ?? 80,
-          },
-        },
-      });
-    } else if (resolvedType === "array3d") {
-      navigate("/studio", {
-        state: {
-          type: "array3d",
-          content: item.content,
-          from: "vault",
-          id,
-        },
-      });
-    }
-  };
-
-  // ✅ 노트 업데이트 (제목 / 수식 / 태그)
-  const handleUpdateNote = (id, patch) => {
-    setNotes((prev) => {
-      const next = prev.map((n) =>
-        n.id === id
-          ? {
-              ...n,
-              ...patch,
-              updatedAt: new Date().toISOString(),
-            }
-          : n
-      );
-      localStorage.setItem(LS_KEY_NEW, JSON.stringify(next));
-      return next;
-    });
-    setFocusTick((t) => t + 1);
-  };
-
-  // ✅ 노트 삭제
-  const handleDeleteNote = (id) => {
-    const target = notes.find((n) => n.id === id);
-    if (!target) return;
-    if (
-      !window.confirm(
-        `"${target.title || "Untitled"}" 노트를 삭제하시겠습니까?`
-      )
-    )
-      return;
-
-    setNotes((prev) => {
-      const next = prev.filter((n) => n.id !== id);
-      localStorage.setItem(LS_KEY_NEW, JSON.stringify(next));
-      if (activeId === id) {
-        setActiveId(next[0]?.id ?? null);
-        setFocusTick((t) => t + 1);
-      }
-      return next;
-    });
   };
 
   useEffect(() => {
@@ -443,6 +320,7 @@ export default function Vault() {
           onUpdate={handleUpdateNote}
           onDelete={handleDeleteNote}
         />
+
         <div
           className="vault-resizer"
           style={{
@@ -469,46 +347,40 @@ export default function Vault() {
             <div style={{ fontSize: 16, fontWeight: 600 }}>
               {activeNote ? activeNote.title : "No selection"}
             </div>
+            {error && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#ff7676" }}>
+                {error}
+              </div>
+            )}
           </div>
+
           <div className="vault-actions">
-            <button className="vault-btn" onClick={() => setShowNew(true)}>
+            <button
+              className="vault-btn"
+              onClick={() => setShowNew(true)}
+              disabled={loading}
+            >
               + New
             </button>
+
             <button
               className="vault-btn"
               onClick={() => activeId && handleOpenStudio(activeId)}
+              disabled={!activeId}
             >
               Open in Studio
             </button>
+
             <button className="vault-btn" onClick={exportJson}>
               Export
             </button>
-            <button className="vault-btn" onClick={importDummy}>
-              Reset demo
-            </button>
+
             <button
               className="vault-btn"
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    "Clear vault cache (localStorage) and reload demo data?"
-                  )
-                )
-                  return;
-                try {
-                  localStorage.removeItem(LS_KEY_NEW);
-                  localStorage.removeItem(LS_KEY_OLD);
-                } catch (e) {
-                  console.error("Failed to clear localStorage keys:", e);
-                }
-                const seeded = dummyResources.map(normalizeResourceType);
-                localStorage.setItem(LS_KEY_NEW, JSON.stringify(seeded));
-                setNotes(seeded);
-                setActiveId(seeded[0]?.id || null);
-                setFocusTick((t) => t + 1);
-              }}
+              onClick={fetchVault}
+              disabled={loading}
             >
-              Clear Cache
+              {loading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         </div>

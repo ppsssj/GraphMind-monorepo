@@ -12,6 +12,7 @@ import Array3DToolbar from "../ui/Array3DToolBar";
 import Curve3DView from "../ui/Curve3DView";
 import Surface3DView from "../ui/Surface3DView";
 import { dummyResources } from "../data/dummyEquations";
+import { api } from "../api/apiClient";
 // (studioReducer import removed: not used in this Studio-only integration)
 import "../styles/Studio.css";
 import AIPanel from "../components/ai/AIPanel";
@@ -763,17 +764,53 @@ export default function Studio() {
   const location = useLocation();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
 
-  // ✅ Vault에서 불러온 리소스
-  const [vaultResources, setVaultResources] = useState(() => {
+  const [vaultResources, setVaultResources] = useState([]);
+const [vaultLoading, setVaultLoading] = useState(false);
+const [vaultError, setVaultError] = useState("");
+
+const refreshVaultResources = useCallback(async () => {
+  setVaultLoading(true);
+  setVaultError("");
+  try {
+    // full로 받아야 curve/surface/studio 이동에 필요한 필드가 충분함
+    const items = await api.listVaultItems({ view: "full" });
+    const arr = Array.isArray(items) ? items : [];
+    setVaultResources(arr);
+
+    // (선택) fallback 캐시
     try {
-      const raw = localStorage.getItem(VAULT_KEY);
-      if (!raw) return dummyResources;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : dummyResources;
+      localStorage.setItem("vaultResources", JSON.stringify(arr));
+    } catch {}
+  } catch (e) {
+    const msg = e?.message || String(e);
+    setVaultError(msg);
+
+    // fallback: localStorage → dummy
+    try {
+      const raw = localStorage.getItem("vaultResources");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setVaultResources(parsed);
+        else setVaultResources(dummyResources);
+      } else {
+        setVaultResources(dummyResources);
+      }
     } catch {
-      return dummyResources;
+      setVaultResources(dummyResources);
     }
-  });
+
+    if (msg === "UNAUTHORIZED") {
+      // 필요하면 intro로 보내는 처리도 가능
+      // navigate("/", { replace: true });
+    }
+  } finally {
+    setVaultLoading(false);
+  }
+}, []);
+
+useEffect(() => {
+  refreshVaultResources();
+}, [refreshVaultResources]);
 
   // ✅ equation 타입만 필터링해서 LeftPanel "Equations" 섹션에 사용
   const equationsFromVault = useMemo(

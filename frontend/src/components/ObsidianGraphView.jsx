@@ -365,10 +365,10 @@ export default function ObsidianGraphView({
             const id = String(node.id);
             if (!id.startsWith("tag:")) onActivate(id);
           }}
-          onNodeRightClick={(node) => {
-            const id = String(node.id);
-            if (!id.startsWith("tag:")) onOpenStudio(id);
-          }}
+          onNodeRightClick={(node, event) => {
+    event.preventDefault();          // 브라우저 기본 우클릭 메뉴 방지
+    onOpenStudio?.(node.id);         // Vault.jsx의 handleOpenStudio로 연결됨
+  }}
           cooldownTime={8000}
           backgroundColor="#0f1115"
         />

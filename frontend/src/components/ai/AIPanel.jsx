@@ -7,7 +7,7 @@ import rehypeKatex from "rehype-katex";
 import "../../styles/AIPanel.css";
 
 const PROXY_API_URL = "http://localhost:4000/api/ai/chat";
-
+const HISTORY_API_URL = "http://localhost:8080/api/ai/history";
 const TABS = [
   { id: "explain", label: "그래프 설명" },
   { id: "equation", label: "수식 도우미" },
@@ -129,7 +129,9 @@ z(t): ${ctx.zExpr}
       "\n"
     );
   }
-  return `현재 탭: ${ctx.title ?? "(untitled)"} (tabId:${ctx.tabId ?? "-"})\n\n`;
+  return `현재 탭: ${ctx.title ?? "(untitled)"} (tabId:${
+    ctx.tabId ?? "-"
+  })\n\n`;
 }
 
 function buildControlResultText({ parsed, ctx, rawMessage }) {
@@ -156,7 +158,9 @@ function buildControlResultText({ parsed, ctx, rawMessage }) {
       return (
         head +
         "\n- 현재 도메인 내에서 최대값 후보 지점에 좌표 노드(마커)를 생성했습니다." +
-        `\n- 탐색 샘플 수: ${args.samples ?? 2500} (정밀도가 필요하면 samples를 올리세요)` +
+        `\n- 탐색 샘플 수: ${
+          args.samples ?? 2500
+        } (정밀도가 필요하면 samples를 올리세요)` +
         commonTip
       );
     }
@@ -181,7 +185,9 @@ function buildControlResultText({ parsed, ctx, rawMessage }) {
       return (
         head +
         "\n- '입력 수식(typed)'과 '기준/피팅(fit)' 그래프의 교차 지점에 좌표 노드(마커)를 생성했습니다." +
-        `\n- 최대 교점 개수: ${args.maxIntersections ?? 12}, tol: ${args.tol ?? 1e-6}` +
+        `\n- 최대 교점 개수: ${args.maxIntersections ?? 12}, tol: ${
+          args.tol ?? 1e-6
+        }` +
         commonTip
       );
     }
@@ -211,14 +217,18 @@ function buildControlResultText({ parsed, ctx, rawMessage }) {
     if (action === "slice_t") {
       return (
         head +
-        `\n- t=${args.t ?? "(미지정)"} 에서의 곡선 좌표를 계산해 마커로 표시했습니다.` +
+        `\n- t=${
+          args.t ?? "(미지정)"
+        } 에서의 곡선 좌표를 계산해 마커로 표시했습니다.` +
         commonTip
       );
     }
     if (action === "tangent_at") {
       return (
         head +
-        `\n- t=${args.t ?? "(미지정)"} 에서의 접선(수치 미분 기반)을 계산했습니다.` +
+        `\n- t=${
+          args.t ?? "(미지정)"
+        } 에서의 접선(수치 미분 기반)을 계산했습니다.` +
         `\n- dt: ${args.dt ?? 1e-3}` +
         commonTip
       );
@@ -245,10 +255,18 @@ function buildControlResultText({ parsed, ctx, rawMessage }) {
       );
     }
     if (action === "slice_x") {
-      return head + `\n- x=${args.x ?? "(미지정)"} 단면을 계산해 표시했습니다.` + commonTip;
+      return (
+        head +
+        `\n- x=${args.x ?? "(미지정)"} 단면을 계산해 표시했습니다.` +
+        commonTip
+      );
     }
     if (action === "slice_y") {
-      return head + `\n- y=${args.y ?? "(미지정)"} 단면을 계산해 표시했습니다.` + commonTip;
+      return (
+        head +
+        `\n- y=${args.y ?? "(미지정)"} 단면을 계산해 표시했습니다.` +
+        commonTip
+      );
     }
     if (action === "closest_to_point") {
       const p = args.point ?? { x: 0, y: 0, z: 0 };
@@ -468,7 +486,10 @@ function MarkdownResult({ text, variant }) {
 
   return (
     <div className={"ai-md-card" + (variant ? ` ${variant}` : "")}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+      >
         {md}
       </ReactMarkdown>
     </div>
@@ -526,7 +547,12 @@ function ContextSummary({ ctx }) {
   );
 }
 
-export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) {
+export default function AIPanel({
+  isOpen,
+  onClose,
+  currentContext,
+  onCommand,
+}) {
   const [activeTab, setActiveTab] = useState("explain");
 
   // ✅ 탭별 input/output 분리 (중요)
@@ -560,7 +586,7 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
   const [localEdit, setLocalEdit] = useState(null);
   const [debouncedContext, setDebouncedContext] = useState(currentContext);
 
-  const [historyScope, setHistoryScope] = useState("tab");
+  const [historyScope, setHistoryScope] = useState("all");
   const [historyFilter, setHistoryFilter] = useState("all");
   const [historyQuery, setHistoryQuery] = useState("");
   const [history, setHistory] = useState([]);
@@ -590,7 +616,8 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
   });
 
   // 현재 컨텍스트 기준 키
-  const ctxForKey = localEdit || debouncedContext || { type: "none", tabId: "none" };
+  const ctxForKey = localEdit ||
+    debouncedContext || { type: "none", tabId: "none" };
   const tabKey = TAB_HISTORY_KEY(ctxForKey);
 
   // ---- Load size/pos on open ----
@@ -605,7 +632,11 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
         if (v && typeof v.width === "number" && typeof v.height === "number") {
           setPanelSize({
             width: clamp(v.width, MIN_PANEL_SIZE.width, MAX_PANEL_SIZE.width),
-            height: clamp(v.height, MIN_PANEL_SIZE.height, MAX_PANEL_SIZE.height),
+            height: clamp(
+              v.height,
+              MIN_PANEL_SIZE.height,
+              MAX_PANEL_SIZE.height
+            ),
           });
         }
       }
@@ -634,8 +665,14 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
   useEffect(() => {
     if (!isOpen) return;
     try {
-      if (typeof panelPos.left === "number" && typeof panelPos.top === "number") {
-        localStorage.setItem(PANEL_POS_KEY, JSON.stringify({ left: panelPos.left, top: panelPos.top }));
+      if (
+        typeof panelPos.left === "number" &&
+        typeof panelPos.top === "number"
+      ) {
+        localStorage.setItem(
+          PANEL_POS_KEY,
+          JSON.stringify({ left: panelPos.left, top: panelPos.top })
+        );
       }
     } catch {}
   }, [panelPos, isOpen]);
@@ -738,8 +775,10 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
     e.preventDefault();
 
     const rect = e.currentTarget.closest(".ai-panel")?.getBoundingClientRect();
-    const currentLeft = typeof panelPos.left === "number" ? panelPos.left : rect?.left ?? 0;
-    const currentTop = typeof panelPos.top === "number" ? panelPos.top : rect?.top ?? 0;
+    const currentLeft =
+      typeof panelPos.left === "number" ? panelPos.left : rect?.left ?? 0;
+    const currentTop =
+      typeof panelPos.top === "number" ? panelPos.top : rect?.top ?? 0;
 
     draggingRef.current.active = true;
     draggingRef.current.startX = e.clientX;
@@ -755,22 +794,45 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
 
   // ---- Context debounce ----
   useEffect(() => {
-    setLocalEdit(currentContext ? JSON.parse(JSON.stringify(currentContext)) : null);
+    setLocalEdit(
+      currentContext ? JSON.parse(JSON.stringify(currentContext)) : null
+    );
     const t = setTimeout(() => setDebouncedContext(currentContext), 250);
     return () => clearTimeout(t);
   }, [currentContext]);
 
   // ---- History ----
-  const loadHistory = () => {
-    const key = historyScope === "all" ? GLOBAL_HISTORY_KEY : tabKey;
+  const loadHistory = async () => {
+    const ctx = localEdit || debouncedContext || { tabId: null };
+    const tabId = ctx?.tabId ?? null;
+
+    // scope=tab이면 tabId 필요
+    if (historyScope === "tab" && !tabId) {
+      setHistory([]);
+      setSelectedId(null);
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("scope", historyScope);
+    if (historyScope === "tab") params.set("tabId", tabId);
+    params.set("filter", historyFilter);
+    if (historyQuery?.trim()) params.set("q", historyQuery.trim());
+    params.set("limit", "200");
+
     try {
-      const raw = localStorage.getItem(key);
-      const arr = raw ? JSON.parse(raw) : [];
-      const normalized = Array.isArray(arr) ? arr : [];
-      setHistory(normalized);
-      if (normalized.length && !normalized.some((x) => x.id === selectedId)) setSelectedId(normalized[0].id);
-      if (!normalized.length) setSelectedId(null);
-    } catch {
+      const res = await fetch(`${HISTORY_API_URL}?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setHistory(items);
+
+      if (items.length && !items.some((x) => x.id === selectedId))
+        setSelectedId(items[0].id);
+      if (!items.length) setSelectedId(null);
+    } catch (e) {
+      // 실패 시에도 UI는 살아있게
       setHistory([]);
       setSelectedId(null);
     }
@@ -780,37 +842,59 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
     if (!isOpen) return;
     loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, historyScope, tabKey]);
+  }, [isOpen, historyScope, tabKey, historyFilter, historyQuery]);
 
-  const appendHistoryBoth = (entry) => {
+  const appendHistory = async (entry) => {
     try {
-      const rawTab = localStorage.getItem(tabKey);
-      const tabArr = rawTab ? JSON.parse(rawTab) : [];
-      const nextTab = [entry, ...(Array.isArray(tabArr) ? tabArr : [])].slice(0, 200);
-      localStorage.setItem(tabKey, JSON.stringify(nextTab));
-      if (historyScope === "tab") {
-        setHistory(nextTab);
-        setSelectedId((prev) => prev ?? entry.id);
-      }
-    } catch {}
+      const res = await fetch(HISTORY_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const created = await res.json(); // { item: {...} } or {...}
 
-    try {
-      const rawAll = localStorage.getItem(GLOBAL_HISTORY_KEY);
-      const allArr = rawAll ? JSON.parse(rawAll) : [];
-      const nextAll = [entry, ...(Array.isArray(allArr) ? allArr : [])].slice(0, 500);
-      localStorage.setItem(GLOBAL_HISTORY_KEY, JSON.stringify(nextAll));
-      if (historyScope === "all") {
-        setHistory(nextAll);
-        setSelectedId((prev) => prev ?? entry.id);
+      const item = created?.item ?? created;
+
+      // 현재 scope가 all이면 항상 보임
+      // scope가 tab이면 tabId가 같을 때만 보임
+      const ctx = localEdit || debouncedContext || { tabId: null };
+      const currentTabId = ctx?.tabId ?? null;
+
+      const shouldShow =
+        historyScope === "all" ||
+        (historyScope === "tab" && item?.tabId && item.tabId === currentTabId);
+
+      if (shouldShow) {
+        setHistory((prev) => [item, ...(prev ?? [])].slice(0, 200));
+        setSelectedId((prev) => prev ?? item.id);
       }
-    } catch {}
+    } catch {
+      // 저장 실패는 UI를 막지 않음(원하면 toast 처리)
+    }
   };
 
-  const clearHistory = () => {
-    const key = historyScope === "all" ? GLOBAL_HISTORY_KEY : tabKey;
+  const clearHistory = async () => {
+    const ctx = localEdit || debouncedContext || { tabId: null };
+    const tabId = ctx?.tabId ?? null;
+
+    if (historyScope === "tab" && !tabId) {
+      setHistory([]);
+      setSelectedId(null);
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("scope", historyScope);
+    if (historyScope === "tab") params.set("tabId", tabId);
+
     try {
-      localStorage.removeItem(key);
+      const res = await fetch(`${HISTORY_API_URL}?${params.toString()}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch {}
+
     setHistory([]);
     setSelectedId(null);
   };
@@ -838,7 +922,10 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
     setActiveTab("control");
     setTabIO((prev) => ({
       ...prev,
-      control: { ...(prev.control ?? {}), output: parsed.message ?? "명령을 다시 적용했습니다." },
+      control: {
+        ...(prev.control ?? {}),
+        output: parsed.message ?? "명령을 다시 적용했습니다.",
+      },
     }));
   };
 
@@ -866,7 +953,7 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
       ctxType: ctx?.type ?? null,
       ctxTitle: ctx?.title ?? null,
       tab,
-      input: meta.input ?? (tabIO?.[tab]?.input ?? ""),
+      input: meta.input ?? tabIO?.[tab]?.input ?? "",
     };
 
     try {
@@ -882,7 +969,8 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
       }
 
       const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content ?? safeJsonStringify(data);
+      const content =
+        data?.choices?.[0]?.message?.content ?? safeJsonStringify(data);
 
       const parsed = normalizeCmd(extractJsonFromText(content));
       const outputTextBase = parsed?.message ? parsed.message : content;
@@ -901,15 +989,23 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
         [tab]: { ...(prev?.[tab] ?? {}), output: outputText },
       }));
 
-      appendHistoryBoth({
+      appendHistory({
         ...entryBase,
         output: outputText,
         raw: content,
         parsed,
       });
 
-      if (parsed && parsed.action !== "none" && typeof onCommand === "function") {
-        onCommand({ ...parsed, tabId: ctx?.tabId ?? null, type: ctx?.type ?? null });
+      if (
+        parsed &&
+        parsed.action !== "none" &&
+        typeof onCommand === "function"
+      ) {
+        onCommand({
+          ...parsed,
+          tabId: ctx?.tabId ?? null,
+          type: ctx?.type ?? null,
+        });
       }
     } catch (err) {
       const msg = String(err?.message ?? err);
@@ -917,7 +1013,7 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
         ...prev,
         [tab]: { ...(prev?.[tab] ?? {}), output: msg },
       }));
-      appendHistoryBoth({ ...entryBase, output: msg, raw: msg, parsed: null });
+      appendHistory({ ...entryBase, output: msg, raw: msg, parsed: null });
     } finally {
       setIsLoading(false);
     }
@@ -933,7 +1029,10 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
         content:
           "너는 수학 학습용 설명가다. 현재 그래프/탭 정보를 바탕으로 관찰 포인트를 한국어로 마크다운으로 정리해라. 강조(**), 목록, 수식은 LaTeX(\\( \\), $$ $$)를 사용해라.",
       },
-      { role: "user", content: prefix + "아래 정보를 설명해줘.\n\n" + safeJsonStringify(ctx) },
+      {
+        role: "user",
+        content: prefix + "아래 정보를 설명해줘.\n\n" + safeJsonStringify(ctx),
+      },
     ];
     callLLM(messages, { tab: "explain", input: safeJsonStringify(ctx) });
   };
@@ -969,20 +1068,31 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
         ...prev,
         control: {
           ...(prev.control ?? {}),
-          output: "요청을 입력해 주세요. 예) '최대값 표시해줘', '근 표시해줘', '교점 표시해줘', '마커 지워줘'",
+          output:
+            "요청을 입력해 주세요. 예) '최대값 표시해줘', '근 표시해줘', '교점 표시해줘', '마커 지워줘'",
         },
       }));
       return;
     }
     const messages = [
-      { role: "developer", content: buildControlExtractorPrompt(debouncedContext || currentContext) },
+      {
+        role: "developer",
+        content: buildControlExtractorPrompt(
+          debouncedContext || currentContext
+        ),
+      },
       { role: "user", content: prefix + "UserRequest:\n" + activeInput },
     ];
     callLLM(messages, { tab: "control", input: activeInput });
   };
 
   // ✅ 예시(quick fill)
-  const EQUATION_EXAMPLES = ["0.5*x^3 - 2*x", "sin(x) + 0.3*cos(2*x)", "(x-1)^2 + 3", "exp(-x^2) * sin(3*x)"];
+  const EQUATION_EXAMPLES = [
+    "0.5*x^3 - 2*x",
+    "sin(x) + 0.3*cos(2*x)",
+    "(x-1)^2 + 3",
+    "exp(-x^2) * sin(3*x)",
+  ];
   const CHAT_EXAMPLES = [
     "sin(x) 그래프는 왜 주기적인가요?",
     "미분과 접선의 관계를 예시로 설명해줘",
@@ -996,7 +1106,9 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
     return (history ?? []).filter((e) => {
       if (historyFilter !== "all" && e.tab !== historyFilter) return false;
       if (!q) return true;
-      const hay = `${e.tab ?? ""} ${e.ctxTitle ?? ""} ${e.input ?? ""} ${e.output ?? ""}`.toLowerCase();
+      const hay = `${e.tab ?? ""} ${e.ctxTitle ?? ""} ${e.input ?? ""} ${
+        e.output ?? ""
+      }`.toLowerCase();
       return hay.includes(q);
     });
   }, [history, historyFilter, historyQuery]);
@@ -1026,8 +1138,19 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
   return (
     <>
       <div className="ai-panel-backdrop" onClick={onClose} />
-      <aside className="ai-panel" style={{ width: panelSize.width, height: panelSize.height, ...panelStyle }}>
-        <header className="ai-panel-header ai-panel-header-draggable" onMouseDown={startDragPanel} title="드래그로 패널 이동">
+      <aside
+        className="ai-panel"
+        style={{
+          width: panelSize.width,
+          height: panelSize.height,
+          ...panelStyle,
+        }}
+      >
+        <header
+          className="ai-panel-header ai-panel-header-draggable"
+          onMouseDown={startDragPanel}
+          title="드래그로 패널 이동"
+        >
           <div className="ai-panel-title">AI Panel</div>
           <button className="ai-panel-close" onClick={onClose}>
             ✕
@@ -1038,7 +1161,10 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              className={"ai-panel-tab" + (activeTab === tab.id ? " ai-panel-tab-active" : "")}
+              className={
+                "ai-panel-tab" +
+                (activeTab === tab.id ? " ai-panel-tab-active" : "")
+              }
               onClick={() => setActiveTab(tab.id)}
               title={tab.label}
             >
@@ -1055,14 +1181,25 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
               <ContextSummary ctx={ctx} />
 
               <div className="ai-ctx-actions">
-                <button className="ai-btn" onClick={() => setShowCtxDetail((v) => !v)}>
+                <button
+                  className="ai-btn"
+                  onClick={() => setShowCtxDetail((v) => !v)}
+                >
                   {showCtxDetail ? "상세 숨기기" : "상세 보기(JSON)"}
                 </button>
               </div>
 
-              {showCtxDetail && <pre className="ai-panel-result-text">{safeJsonStringify(ctx)}</pre>}
+              {showCtxDetail && (
+                <pre className="ai-panel-result-text">
+                  {safeJsonStringify(ctx)}
+                </pre>
+              )}
 
-              <button className="ai-panel-primary-btn" onClick={handleExplainGraph} disabled={isLoading}>
+              <button
+                className="ai-panel-primary-btn"
+                onClick={handleExplainGraph}
+                disabled={isLoading}
+              >
                 {isLoading ? "생성 중..." : "그래프 설명 생성"}
               </button>
 
@@ -1070,7 +1207,9 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 {activeOutput ? (
                   <MarkdownResult text={activeOutput} variant="explain" />
                 ) : (
-                  <div className="ai-panel-placeholder">출력이 여기 표시됩니다.</div>
+                  <div className="ai-panel-placeholder">
+                    출력이 여기 표시됩니다.
+                  </div>
                 )}
               </div>
             </div>
@@ -1082,7 +1221,12 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
 
               <div className="ai-quick-examples">
                 {EQUATION_EXAMPLES.map((ex) => (
-                  <button key={ex} className="ai-chip" onClick={() => setInputText(ex)} disabled={isLoading}>
+                  <button
+                    key={ex}
+                    className="ai-chip"
+                    onClick={() => setInputText(ex)}
+                    disabled={isLoading}
+                  >
                     {ex}
                   </button>
                 ))}
@@ -1095,7 +1239,11 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 onChange={(e) => setInputText(e.target.value)}
               />
 
-              <button className="ai-panel-primary-btn" onClick={handleEquation} disabled={isLoading}>
+              <button
+                className="ai-panel-primary-btn"
+                onClick={handleEquation}
+                disabled={isLoading}
+              >
                 {isLoading ? "정리 중..." : "수식 정리/설명"}
               </button>
 
@@ -1103,7 +1251,9 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 {activeOutput ? (
                   <MarkdownResult text={activeOutput} variant="equation" />
                 ) : (
-                  <div className="ai-panel-placeholder">출력이 여기 표시됩니다.</div>
+                  <div className="ai-panel-placeholder">
+                    출력이 여기 표시됩니다.
+                  </div>
                 )}
               </div>
             </div>
@@ -1115,7 +1265,12 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
 
               <div className="ai-quick-examples">
                 {CHAT_EXAMPLES.map((ex) => (
-                  <button key={ex} className="ai-chip" onClick={() => setInputText(ex)} disabled={isLoading}>
+                  <button
+                    key={ex}
+                    className="ai-chip"
+                    onClick={() => setInputText(ex)}
+                    disabled={isLoading}
+                  >
                     {ex}
                   </button>
                 ))}
@@ -1128,7 +1283,11 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 onChange={(e) => setInputText(e.target.value)}
               />
 
-              <button className="ai-panel-primary-btn" onClick={handleChat} disabled={isLoading}>
+              <button
+                className="ai-panel-primary-btn"
+                onClick={handleChat}
+                disabled={isLoading}
+              >
                 {isLoading ? "답변 생성 중..." : "질문 보내기"}
               </button>
 
@@ -1136,7 +1295,9 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 {activeOutput ? (
                   <MarkdownResult text={activeOutput} variant="chat" />
                 ) : (
-                  <div className="ai-panel-placeholder">출력이 여기 표시됩니다.</div>
+                  <div className="ai-panel-placeholder">
+                    출력이 여기 표시됩니다.
+                  </div>
                 )}
               </div>
             </div>
@@ -1147,19 +1308,39 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
               <div className="ai-panel-label">그래프 조작</div>
 
               <div className="ai-control-presets">
-                <button className="ai-btn" disabled={isLoading} onClick={() => setInputText("최대값 표시해줘")}>
+                <button
+                  className="ai-btn"
+                  disabled={isLoading}
+                  onClick={() => setInputText("최대값 표시해줘")}
+                >
                   Max
                 </button>
-                <button className="ai-btn" disabled={isLoading} onClick={() => setInputText("최소값 표시해줘")}>
+                <button
+                  className="ai-btn"
+                  disabled={isLoading}
+                  onClick={() => setInputText("최소값 표시해줘")}
+                >
                   Min
                 </button>
-                <button className="ai-btn" disabled={isLoading} onClick={() => setInputText("근 표시해줘")}>
+                <button
+                  className="ai-btn"
+                  disabled={isLoading}
+                  onClick={() => setInputText("근 표시해줘")}
+                >
                   Roots
                 </button>
-                <button className="ai-btn" disabled={isLoading} onClick={() => setInputText("교점 표시해줘")}>
+                <button
+                  className="ai-btn"
+                  disabled={isLoading}
+                  onClick={() => setInputText("교점 표시해줘")}
+                >
                   Intersections
                 </button>
-                <button className="ai-btn danger" disabled={isLoading} onClick={() => setInputText("마커 지워줘")}>
+                <button
+                  className="ai-btn danger"
+                  disabled={isLoading}
+                  onClick={() => setInputText("마커 지워줘")}
+                >
                   Clear
                 </button>
               </div>
@@ -1171,7 +1352,11 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 onChange={(e) => setInputText(e.target.value)}
               />
 
-              <button className="ai-panel-primary-btn" onClick={handleControl} disabled={isLoading}>
+              <button
+                className="ai-panel-primary-btn"
+                onClick={handleControl}
+                disabled={isLoading}
+              >
                 {isLoading ? "실행 중..." : "명령 실행"}
               </button>
 
@@ -1189,12 +1374,20 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
             <div className="ai-history">
               <div className="ai-history-topbar">
                 <div className="ai-history-topbar-left">
-                  <select className="ai-select" value={historyScope} onChange={(e) => setHistoryScope(e.target.value)}>
+                  <select
+                    className="ai-select"
+                    value={historyScope}
+                    onChange={(e) => setHistoryScope(e.target.value)}
+                  >
                     <option value="tab">현재 탭</option>
                     <option value="all">전체</option>
                   </select>
 
-                  <select className="ai-select" value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)}>
+                  <select
+                    className="ai-select"
+                    value={historyFilter}
+                    onChange={(e) => setHistoryFilter(e.target.value)}
+                  >
                     <option value="all">전체</option>
                     <option value="control">조작</option>
                     <option value="chat">질문</option>
@@ -1202,14 +1395,27 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                     <option value="explain">설명</option>
                   </select>
 
-                  <input className="ai-input" placeholder="검색" value={historyQuery} onChange={(e) => setHistoryQuery(e.target.value)} />
+                  <input
+                    className="ai-input"
+                    placeholder="검색"
+                    value={historyQuery}
+                    onChange={(e) => setHistoryQuery(e.target.value)}
+                  />
                 </div>
 
                 <div className="ai-history-topbar-right">
-                  <button className="ai-btn" onClick={() => loadHistory()} title="새로고침">
+                  <button
+                    className="ai-btn"
+                    onClick={() => loadHistory()}
+                    title="새로고침"
+                  >
                     ⟳
                   </button>
-                  <button className="ai-btn danger" onClick={clearHistory} title="삭제">
+                  <button
+                    className="ai-btn danger"
+                    onClick={clearHistory}
+                    title="삭제"
+                  >
                     🗑
                   </button>
                 </div>
@@ -1226,29 +1432,44 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                         <div className="ai-history-items">
                           {arr.map((e) => {
                             const isSel = e.id === selectedId;
-                            const title = truncate(e.ctxTitle ?? "(untitled)", 34);
+                            const title = truncate(
+                              e.ctxTitle ?? "(untitled)",
+                              34
+                            );
                             const inPrev = truncate(e.input, 46);
                             const outPrev = truncate(e.output, 56);
 
                             return (
                               <button
                                 key={e.id}
-                                className={"ai-history-row" + (isSel ? " selected" : "")}
+                                className={
+                                  "ai-history-row" + (isSel ? " selected" : "")
+                                }
                                 onClick={() => setSelectedId(e.id)}
                                 title={formatKST(e.ts)}
                               >
                                 <div className="ai-history-row-top">
-                                  <span className={"ai-pill " + (e.tab ?? "")}>{badgeLabel(e.tab)}</span>
-                                  <span className="ai-history-row-title">{title}</span>
-                                  <span className="ai-history-row-time">{relativeTime(e.ts)}</span>
+                                  <span className={"ai-pill " + (e.tab ?? "")}>
+                                    {badgeLabel(e.tab)}
+                                  </span>
+                                  <span className="ai-history-row-title">
+                                    {title}
+                                  </span>
+                                  <span className="ai-history-row-time">
+                                    {relativeTime(e.ts)}
+                                  </span>
                                 </div>
                                 <div className="ai-history-row-line">
                                   <span className="ai-dim">In</span>
-                                  <span className="ai-strong">{inPrev || "-"}</span>
+                                  <span className="ai-strong">
+                                    {inPrev || "-"}
+                                  </span>
                                 </div>
                                 <div className="ai-history-row-line">
                                   <span className="ai-dim">Out</span>
-                                  <span className="ai-dim2">{outPrev || "-"}</span>
+                                  <span className="ai-dim2">
+                                    {outPrev || "-"}
+                                  </span>
                                 </div>
                               </button>
                             );
@@ -1261,35 +1482,62 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
 
                 <div className="ai-history-detail">
                   {!selected ? (
-                    <div className="ai-panel-placeholder">왼쪽에서 기록을 선택하세요.</div>
+                    <div className="ai-panel-placeholder">
+                      왼쪽에서 기록을 선택하세요.
+                    </div>
                   ) : (
                     <>
                       <div className="ai-history-detail-head">
                         <div className="ai-history-detail-head-left">
-                          <span className={"ai-pill " + (selected.tab ?? "")}>{badgeLabel(selected.tab)}</span>
+                          <span className={"ai-pill " + (selected.tab ?? "")}>
+                            {badgeLabel(selected.tab)}
+                          </span>
                           <div className="ai-history-detail-title">
-                            <div className="ai-history-detail-title-main">{selected.ctxTitle ?? "(untitled)"}</div>
-                            <div className="ai-history-detail-sub">{formatKST(selected.ts)}</div>
+                            <div className="ai-history-detail-title-main">
+                              {selected.ctxTitle ?? "(untitled)"}
+                            </div>
+                            <div className="ai-history-detail-sub">
+                              {formatKST(selected.ts)}
+                            </div>
                           </div>
                         </div>
 
                         <div className="ai-history-detail-actions">
-                          <button className="ai-iconbtn" onClick={() => restoreFromEntry(selected)} title="다시보기">
+                          <button
+                            className="ai-iconbtn"
+                            onClick={() => restoreFromEntry(selected)}
+                            title="다시보기"
+                          >
                             ↩
                           </button>
-                          <button className="ai-iconbtn" onClick={() => copyText(selected.output)} title="출력 복사">
+                          <button
+                            className="ai-iconbtn"
+                            onClick={() => copyText(selected.output)}
+                            title="출력 복사"
+                          >
                             ⧉
                           </button>
-                          <button className="ai-iconbtn" onClick={() => copyText(selected.input)} title="입력 복사">
+                          <button
+                            className="ai-iconbtn"
+                            onClick={() => copyText(selected.input)}
+                            title="입력 복사"
+                          >
                             ⌁
                           </button>
-                          {selected?.parsed?.action && selected.parsed.action !== "none" && (
-                            <button className="ai-iconbtn" onClick={() => reapplyCommand(selected)} title="재적용">
-                              ⟲
-                            </button>
-                          )}
+                          {selected?.parsed?.action &&
+                            selected.parsed.action !== "none" && (
+                              <button
+                                className="ai-iconbtn"
+                                onClick={() => reapplyCommand(selected)}
+                                title="재적용"
+                              >
+                                ⟲
+                              </button>
+                            )}
                           <button
-                            className={"ai-iconbtn" + (showRaw ? " active" : "")}
+                            className={
+                              "ai-iconbtn" + (showRaw ? " active" : "")
+                            }
                             onClick={() => setShowRaw((v) => !v)}
                             title="모델 응답 원문(가공 전) 보기"
                           >
@@ -1304,29 +1552,41 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
 
                           {selected.tab === "explain" ? (
                             <div className="ai-card-md">
-                              <ContextSummary ctx={safeParseJSON(selected.input)} />
+                              <ContextSummary
+                                ctx={safeParseJSON(selected.input)}
+                              />
                               <div className="ai-inline-actions">
-                                <button className="ai-btn" onClick={() => copyText(selected.input)}>
+                                <button
+                                  className="ai-btn"
+                                  onClick={() => copyText(selected.input)}
+                                >
                                   JSON 복사
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            <pre className="ai-card-pre">{selected.input ?? ""}</pre>
+                            <pre className="ai-card-pre">
+                              {selected.input ?? ""}
+                            </pre>
                           )}
                         </div>
 
                         <div className="ai-card">
                           <div className="ai-card-h">Output</div>
                           <div className="ai-card-md">
-                            <MarkdownResult text={selected.output ?? ""} variant={selected.tab ?? "history"} />
+                            <MarkdownResult
+                              text={selected.output ?? ""}
+                              variant={selected.tab ?? "history"}
+                            />
                           </div>
                         </div>
 
                         {showRaw && (
                           <div className="ai-card">
                             <div className="ai-card-h">Raw</div>
-                            <pre className="ai-card-pre">{selected.raw ?? ""}</pre>
+                            <pre className="ai-card-pre">
+                              {selected.raw ?? ""}
+                            </pre>
                           </div>
                         )}
                       </div>
@@ -1335,7 +1595,9 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
                 </div>
               </div>
 
-              <div className="ai-history-footnote">History는 localStorage에 저장됩니다. (현재 탭 / 전체)</div>
+              <div className="ai-history-footnote">
+                History는 localStorage에 저장됩니다. (현재 탭 / 전체)
+              </div>
             </div>
           )}
         </div>
@@ -1344,7 +1606,11 @@ export default function AIPanel({ isOpen, onClose, currentContext, onCommand }) 
           <div className="ai-panel-helper-text">AI 출력은 누적 저장됩니다.</div>
         </footer>
 
-        <div className="ai-panel-resizer" onMouseDown={startResize} title="드래그로 크기 조절" />
+        <div
+          className="ai-panel-resizer"
+          onMouseDown={startResize}
+          title="드래그로 크기 조절"
+        />
       </aside>
     </>
   );
