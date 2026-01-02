@@ -1,4 +1,5 @@
 ````md
+```bash
 # GraphMind Frontend
 
 GraphMind의 UI/시각화(2D/3D 그래프, Vault/Studio 워크플로우)를 담당하는 프론트엔드입니다.
@@ -19,12 +20,12 @@ GraphMind의 UI/시각화(2D/3D 그래프, Vault/Studio 워크플로우)를 담�
 ---
 
 ## Quick Start
-
+```
 ```bash
 cd frontend
 npm install
 npm run dev
-````
+```
 
 * Dev Server: `http://localhost:5173`
 
