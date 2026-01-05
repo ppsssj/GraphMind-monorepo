@@ -6,12 +6,14 @@ import com.graphmind.backend.service.AiHistoryService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
 import java.util.*;
 
 @RestController
-@RequestMapping("/api/ai/history")
+@RequestMapping("/api/v1/ai/history") // ✅ v1로 통일
 public class AiHistoryController {
 
     private final AiHistoryService service;
@@ -22,6 +24,7 @@ public class AiHistoryController {
 
     @GetMapping
     public Map<String, Object> list(
+            @RequestAttribute("userId") String userId,   // ✅ AuthFilter가 넣어줌
             @RequestParam(defaultValue = "all") String scope,
             @RequestParam(required = false) String tabId,
             @RequestParam(defaultValue = "all") String filter,
@@ -31,15 +34,26 @@ public class AiHistoryController {
         if ("tab".equalsIgnoreCase(scope) && (tabId == null || tabId.isBlank())) {
             return Map.of("items", List.of());
         }
-        List<AiHistoryItem> items = service.list(scope, tabId, filter, q, limit);
+        List<AiHistoryItem> items = service.list(userId, scope, tabId, filter, q, limit);
         return Map.of("items", items);
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> create(@Valid @RequestBody AiHistoryCreateRequest req) {
+    public ResponseEntity<Map<String, Object>> create(
+            @RequestAttribute("userId") String userId,
+            @Valid @RequestBody AiHistoryCreateRequest req
+    ) {
         AiHistoryItem item = new AiHistoryItem();
         item.setId(UUID.randomUUID().toString());
-        item.setTs((req.ts != null && !req.ts.isBlank()) ? Instant.parse(req.ts) : Instant.now());
+        item.setUserId(userId);
+
+        // ✅ ts 파싱 실패 방어
+        try {
+            item.setTs((req.ts != null && !req.ts.isBlank()) ? Instant.parse(req.ts) : Instant.now());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_ts");
+        }
+
         item.setTabId(req.tabId);
         item.setCtxType(req.ctxType);
         item.setCtxTitle(req.ctxTitle);
@@ -55,13 +69,14 @@ public class AiHistoryController {
 
     @DeleteMapping
     public Map<String, Object> clear(
+            @RequestAttribute("userId") String userId,
             @RequestParam(defaultValue = "all") String scope,
             @RequestParam(required = false) String tabId
     ) {
         if ("tab".equalsIgnoreCase(scope) && (tabId == null || tabId.isBlank())) {
             return Map.of("ok", true);
         }
-        service.clear(scope, tabId);
+        service.clear(userId, scope, tabId);
         return Map.of("ok", true);
     }
 }

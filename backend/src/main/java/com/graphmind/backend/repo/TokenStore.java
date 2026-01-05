@@ -15,4 +15,8 @@ public class TokenStore {
     public String resolveUserId(String token) {
         return tokenToUser.get(token);
     }
+
+    public void revoke(String token) {
+        tokenToUser.remove(token);
+    }
 }

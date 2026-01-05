@@ -15,9 +15,14 @@ public class AiHistoryService {
         this.store = store;
     }
 
-    public List<AiHistoryItem> list(String scope, String tabId, String filter, String q, Integer limit) {
+    public List<AiHistoryItem> list(String userId, String scope, String tabId, String filter, String q, Integer limit) {
         int lim = (limit == null) ? 200 : Math.max(1, Math.min(500, limit));
         List<AiHistoryItem> base = store.listAll();
+
+        // ✅ 유저 스코프
+        base = base.stream()
+                .filter(x -> Objects.equals(x.getUserId(), userId))
+                .collect(Collectors.toList());
 
         if ("tab".equalsIgnoreCase(scope)) {
             base = base.stream()
@@ -50,8 +55,8 @@ public class AiHistoryService {
         return store.add(item, 2000);
     }
 
-    public void clear(String scope, String tabId) {
-        if ("tab".equalsIgnoreCase(scope)) store.clearByTabId(tabId);
-        else store.clearAll();
+    public void clear(String userId, String scope, String tabId) {
+        if ("tab".equalsIgnoreCase(scope)) store.clearByTabId(userId, tabId);
+        else store.clearByUser(userId);
     }
 }

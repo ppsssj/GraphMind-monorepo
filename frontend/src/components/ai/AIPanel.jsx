@@ -6,8 +6,55 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "../../styles/AIPanel.css";
 
+import { getToken } from "../../api/apiClient";
 const PROXY_API_URL = "http://localhost:4000/api/ai/chat";
-const HISTORY_API_URL = "http://localhost:8080/api/ai/history";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE) ||
+  (typeof process !== "undefined" &&
+    process.env &&
+    process.env.REACT_APP_API_BASE) ||
+  "http://localhost:8080";
+
+// v1 우선 → 없으면 legacy(/api/ai/history)로 fallback
+const HISTORY_ENDPOINTS = [
+  `${API_BASE}/api/v1/ai/history`,
+  `${API_BASE}/api/ai/history`,
+];
+
+const getAuthHeader = () => {
+  const t =
+    (typeof getToken === "function" ? getToken() : null) ||
+    localStorage.getItem("gm_token") ||
+    "";
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+
+const authedFetch = (url, opts = {}) => {
+  const headers = { ...(opts.headers || {}), ...getAuthHeader() };
+  return fetch(url, { ...opts, headers });
+};
+
+const fetchHistory = async (buildUrl, opts) => {
+  let lastErr = null;
+
+  for (const base of HISTORY_ENDPOINTS) {
+    const url = buildUrl(base);
+    try {
+      const res = await authedFetch(url, opts);
+      // 404면 다른 endpoint 시도
+      if (res.status === 404) continue;
+      return res;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error("history_endpoint_not_found");
+};
+
 const TABS = [
   { id: "explain", label: "그래프 설명" },
   { id: "equation", label: "수식 도우미" },
@@ -803,8 +850,19 @@ export default function AIPanel({
 
   // ---- History ----
   const loadHistory = async () => {
-    const ctx = localEdit || debouncedContext || { tabId: null };
+    const ctx = localEdit ||
+      debouncedContext ||
+      currentContext || { type: null, tabId: null, title: null };
     const tabId = ctx?.tabId ?? null;
+
+    const token =
+      (typeof getToken === "function" ? getToken() : null) ||
+      localStorage.getItem("gm_token");
+    if (!token) {
+      setHistory([]);
+      setSelectedId(null);
+      return;
+    }
 
     // scope=tab이면 tabId 필요
     if (historyScope === "tab" && !tabId) {
@@ -821,7 +879,15 @@ export default function AIPanel({
     params.set("limit", "200");
 
     try {
-      const res = await fetch(`${HISTORY_API_URL}?${params.toString()}`);
+      const res = await fetchHistory(
+        (base) => `${base}?${params.toString()}`,
+        {}
+      );
+      if (res.status === 401) {
+        setHistory([]);
+        setSelectedId(null);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
@@ -846,11 +912,16 @@ export default function AIPanel({
 
   const appendHistory = async (entry) => {
     try {
-      const res = await fetch(HISTORY_API_URL, {
+      const token =
+        (typeof getToken === "function" ? getToken() : null) ||
+        localStorage.getItem("gm_token");
+      if (!token) return;
+      const res = await fetchHistory((base) => base, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
       });
+      if (res.status === 401) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const created = await res.json(); // { item: {...} } or {...}
 
@@ -878,6 +949,15 @@ export default function AIPanel({
     const ctx = localEdit || debouncedContext || { tabId: null };
     const tabId = ctx?.tabId ?? null;
 
+    const token =
+      (typeof getToken === "function" ? getToken() : null) ||
+      localStorage.getItem("gm_token");
+    if (!token) {
+      setHistory([]);
+      setSelectedId(null);
+      return;
+    }
+
     if (historyScope === "tab" && !tabId) {
       setHistory([]);
       setSelectedId(null);
@@ -889,10 +969,10 @@ export default function AIPanel({
     if (historyScope === "tab") params.set("tabId", tabId);
 
     try {
-      const res = await fetch(`${HISTORY_API_URL}?${params.toString()}`, {
+      const res = await fetchHistory((base) => `${base}?${params.toString()}`, {
         method: "DELETE",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (res.status !== 401 && !res.ok) throw new Error(`HTTP ${res.status}`);
     } catch {}
 
     setHistory([]);
@@ -975,14 +1055,18 @@ export default function AIPanel({
       const parsed = normalizeCmd(extractJsonFromText(content));
       const outputTextBase = parsed?.message ? parsed.message : content;
 
-      const outputText =
-        tab === "control"
-          ? buildControlResultText({
-              parsed,
-              ctx: localEdit || debouncedContext || currentContext,
-              rawMessage: outputTextBase,
-            })
-          : outputTextBase;
+      let outputText = outputTextBase;
+      if (tab === "control") {
+        try {
+          outputText = buildControlResultText({
+            parsed,
+            ctx: localEdit || debouncedContext || currentContext,
+            rawMessage: outputTextBase,
+          });
+        } catch {
+          outputText = outputTextBase; // ✅ 최소 보장
+        }
+      }
 
       setTabIO((prev) => ({
         ...prev,

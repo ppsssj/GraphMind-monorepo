@@ -7,6 +7,7 @@ import MiniVaultDemo from "../components/MiniVaultDemo";
 import Plot from "react-plotly.js";
 import GraphCanvas from "../ui/GraphCanvas";
 import { getToken } from "../api/apiClient";
+import AuthStatusPanel from "../ui/AuthStatePanel";
 export default function Intro() {
   const nav = useNavigate();
   const [activeIdx, setActiveIdx] = useState(null);
@@ -43,7 +44,7 @@ export default function Intro() {
       pos: "center 35%",
     },
   ];
-
+  
   return (
     <div className="intro-root">
       <ParticleBackground density={0.00012} accentRatio={0.09} />
@@ -89,11 +90,17 @@ export default function Intro() {
             Get Started
           </button>
         </nav>
-        <button className="ghost" onClick={() => setLoginOpen(true)}>
+        {/* <button className="ghost" onClick={() => setLoginOpen(true)}>
           Login
-        </button>
-
-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+        </button> */}
+        <AuthStatusPanel onLoginClick={() => setLoginOpen(true)} />
+        <LoginModal
+          open={loginOpen}
+          onClose={() => setLoginOpen(false)}
+          onAuthed={() => {
+            /* 필요하면 상태 갱신 */
+          }}
+        />{" "}
       </header>
 
       {/* Hero */}

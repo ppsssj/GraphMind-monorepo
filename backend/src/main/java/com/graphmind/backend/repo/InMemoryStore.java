@@ -12,4 +12,13 @@ public class InMemoryStore {
     public final ConcurrentHashMap<String, VaultItem> vaultItems = new ConcurrentHashMap<>();
     public final ConcurrentHashMap<String, StudioProject> studioProjects = new ConcurrentHashMap<>();
     public final ConcurrentLinkedDeque<HistoryEvent> history = new ConcurrentLinkedDeque<>();
+
+    // ✅ 진짜 로그인용: email -> 계정정보
+    public final ConcurrentHashMap<String, LocalAccount> accountsByEmail = new ConcurrentHashMap<>();
+
+    public record LocalAccount(
+            String userId,
+            String email,
+            String passwordHash
+    ) {}
 }

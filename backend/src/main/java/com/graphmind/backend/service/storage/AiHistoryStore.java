@@ -1,10 +1,9 @@
 package com.graphmind.backend.service.storage;
 
-import org.springframework.stereotype.Component;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.graphmind.backend.domain.ai.AiHistoryItem;
-
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.json.JsonMapper;
+import org.springframework.stereotype.Component;
 
 import java.nio.file.*;
 import java.util.*;
@@ -12,13 +11,13 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @Component
 public class AiHistoryStore {
-    private final JsonMapper om;
+    private final ObjectMapper om;
     private final Path filePath = Paths.get("data", "ai_history.json");
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
     private List<AiHistoryItem> items = new ArrayList<>();
 
-    public AiHistoryStore(JsonMapper om) {
+    public AiHistoryStore(ObjectMapper om) {
         this.om = om;
         load();
     }
@@ -75,7 +74,7 @@ public class AiHistoryStore {
     public AiHistoryItem add(AiHistoryItem item, int hardCap) {
         lock.writeLock().lock();
         try {
-            items.add(0, item); // 최신이 앞
+            items.add(0, item);
             if (items.size() > hardCap) {
                 items = new ArrayList<>(items.subList(0, hardCap));
             }
@@ -96,10 +95,20 @@ public class AiHistoryStore {
         }
     }
 
-    public void clearByTabId(String tabId) {
+    public void clearByTabId(String userId, String tabId) {
         lock.writeLock().lock();
         try {
-            items.removeIf(x -> Objects.equals(x.getTabId(), tabId));
+            items.removeIf(x -> Objects.equals(x.getUserId(), userId) && Objects.equals(x.getTabId(), tabId));
+            flush();
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void clearByUser(String userId) {
+        lock.writeLock().lock();
+        try {
+            items.removeIf(x -> Objects.equals(x.getUserId(), userId));
             flush();
         } finally {
             lock.writeLock().unlock();

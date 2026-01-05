@@ -5,7 +5,8 @@ export function getToken() {
 }
 
 export function setToken(token) {
-  localStorage.setItem("gm_token", token);
+  if (!token) localStorage.removeItem("gm_token");
+  else localStorage.setItem("gm_token", token);
 }
 
 async function request(path, { method = "GET", body, headers = {} } = {}) {
@@ -21,44 +22,64 @@ async function request(path, { method = "GET", body, headers = {} } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401) throw new Error("UNAUTHORIZED");
-
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text || null;
+  }
 
   if (!res.ok) {
-    const msg = data?.message || data?.error || `HTTP_${res.status}`;
-    throw new Error(msg);
+    const err = new Error("API_ERROR");
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
+
   return data;
 }
 
 export const api = {
-  // Auth
-  guestLogin: (displayName = "Guest") =>
-    request("/api/v1/auth/guest", { method: "POST", body: { displayName } }),
+  // ✅ auth
+  register: (email, password, displayName) =>
+    request("/api/v1/auth/register", {
+      method: "POST",
+      body: { email, password, displayName },
+    }),
 
-  // Vault (list)
-  listVaultItems: ({ tag, q } = {}) => {
+  login: (email, password) =>
+    request("/api/v1/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }),
+
+  // health / me
+  health: () => request("/health"),
+  me: () => request("/api/v1/me"),
+
+  // Vault
+  listVaultItems: ({ tag, q, view = "summary" } = {}) => {
     const sp = new URLSearchParams();
     if (tag) sp.set("tag", tag);
     if (q) sp.set("q", q);
+    if (view) sp.set("view", view);
     const qs = sp.toString();
     return request(`/api/v1/vault/items${qs ? `?${qs}` : ""}`);
   },
 
-  // Vault (create)
   createVaultItem: (payload) =>
     request(`/api/v1/vault/items`, { method: "POST", body: payload }),
 
-  // Vault (meta patch)
   patchVaultMeta: (id, { title, tags, formula }) =>
     request(`/api/v1/vault/items/${id}/meta`, {
       method: "PATCH",
       body: { title, tags, formula },
     }),
 
-  // Vault (delete)
   deleteVaultItem: (id) =>
     request(`/api/v1/vault/items/${id}`, { method: "DELETE" }),
+
+  logout: () => request("/api/v1/auth/logout", { method: "POST" }),
+
 };

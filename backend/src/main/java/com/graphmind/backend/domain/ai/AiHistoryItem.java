@@ -1,11 +1,15 @@
 package com.graphmind.backend.domain.ai;
 
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 
 public class AiHistoryItem {
     private String id;
     private Instant ts;
+
+    // ✅ 로그인 사용자 스코프 분리
+    private String userId;
+
     private String tabId;
     private String ctxType;
     private String ctxTitle;
@@ -20,6 +24,9 @@ public class AiHistoryItem {
 
     public Instant getTs() { return ts; }
     public void setTs(Instant ts) { this.ts = ts; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
 
     public String getTabId() { return tabId; }
     public void setTabId(String tabId) { this.tabId = tabId; }

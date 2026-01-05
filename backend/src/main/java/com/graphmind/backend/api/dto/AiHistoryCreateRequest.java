@@ -1,7 +1,7 @@
 package com.graphmind.backend.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import tools.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonNode;
 
 public class AiHistoryCreateRequest {
     public String ts;

@@ -1,0 +1,32 @@
+.auth-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(8px);
+}
+
+.auth-status-title {
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.auth-status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-status-btn {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  cursor: pointer;
+}
+
+.auth-status-btn.secondary {
+  opacity: 0.85;
+}
