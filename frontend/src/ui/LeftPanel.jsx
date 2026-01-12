@@ -177,11 +177,20 @@ function MiniCurvePreview({ curve, width = 180, height = 72 }) {
     const xFn = exprToFnT(curve.xExpr ?? curve.x ?? "t");
     const yFn = exprToFnT(curve.yExpr ?? curve.y ?? "t");
 
-    const tMin = curve.tMin ?? (Array.isArray(curve.tRange) ? curve.tRange[0] : 0);
-    const tMax = curve.tMax ?? (Array.isArray(curve.tRange) ? curve.tRange[1] : 2 * Math.PI);
+    const tMin =
+      curve.tMin ?? (Array.isArray(curve.tRange) ? curve.tRange[0] : 0);
+    const tMax =
+      curve.tMax ??
+      (Array.isArray(curve.tRange) ? curve.tRange[1] : 2 * Math.PI);
 
-    const samples = Math.min(120, Math.max(16, Math.floor((curve.samples ?? 200) / 4)));
-    const ts = Array.from({ length: samples }, (_, i) => tMin + (i * (tMax - tMin)) / (samples - 1));
+    const samples = Math.min(
+      120,
+      Math.max(16, Math.floor((curve.samples ?? 200) / 4))
+    );
+    const ts = Array.from(
+      { length: samples },
+      (_, i) => tMin + (i * (tMax - tMin)) / (samples - 1)
+    );
 
     const pts = ts
       .map((t) => ({ x: xFn(t), y: yFn(t) }))
@@ -192,14 +201,24 @@ function MiniCurvePreview({ curve, width = 180, height = 72 }) {
     let xmax = Math.max(...pts.map((p) => p.x));
     let ymin = Math.min(...pts.map((p) => p.y));
     let ymax = Math.max(...pts.map((p) => p.y));
-    if (xmin === xmax) { xmin -= 1; xmax += 1; }
-    if (ymin === ymax) { ymin -= 1; ymax += 1; }
+    if (xmin === xmax) {
+      xmin -= 1;
+      xmax += 1;
+    }
+    if (ymin === ymax) {
+      ymin -= 1;
+      ymax += 1;
+    }
     const padX = (xmax - xmin) * 0.08;
     const padY = (ymax - ymin) * 0.08;
-    xmin -= padX; xmax += padX; ymin -= padY; ymax += padY;
+    xmin -= padX;
+    xmax += padX;
+    ymin -= padY;
+    ymax += padY;
 
     const mx = (x) => ((x - xmin) / (xmax - xmin)) * (width - 8) + 4;
-    const my = (y) => height - (((y - ymin) / (ymax - ymin)) * (height - 8) + 4);
+    const my = (y) =>
+      height - (((y - ymin) / (ymax - ymin)) * (height - 8) + 4);
 
     ctx.fillStyle = "#0f1320";
     ctx.fillRect(0, 0, width, height);
@@ -294,22 +313,30 @@ function MiniSurfacePreview({ surface, width = 140, height = 72 }) {
     const xMin =
       surface.xMin ??
       surface.surface3d?.xMin ??
-      (Array.isArray(surface.xRange) ? surface.xRange[0] : surface.surface3d?.xRange?.[0]) ??
+      (Array.isArray(surface.xRange)
+        ? surface.xRange[0]
+        : surface.surface3d?.xRange?.[0]) ??
       -3;
     const xMax =
       surface.xMax ??
       surface.surface3d?.xMax ??
-      (Array.isArray(surface.xRange) ? surface.xRange[1] : surface.surface3d?.xRange?.[1]) ??
+      (Array.isArray(surface.xRange)
+        ? surface.xRange[1]
+        : surface.surface3d?.xRange?.[1]) ??
       3;
     const yMin =
       surface.yMin ??
       surface.surface3d?.yMin ??
-      (Array.isArray(surface.yRange) ? surface.yRange[0] : surface.surface3d?.yRange?.[0]) ??
+      (Array.isArray(surface.yRange)
+        ? surface.yRange[0]
+        : surface.surface3d?.yRange?.[0]) ??
       -3;
     const yMax =
       surface.yMax ??
       surface.surface3d?.yMax ??
-      (Array.isArray(surface.yRange) ? surface.yRange[1] : surface.surface3d?.yRange?.[1]) ??
+      (Array.isArray(surface.yRange)
+        ? surface.yRange[1]
+        : surface.surface3d?.yRange?.[1]) ??
       3;
 
     const fn = exprToFnXY(exprRaw);
@@ -439,10 +466,22 @@ export default function LeftPanel({
     return equations.map((e) => ({ ...e, type: "equation" }));
   }, [resources, equations]);
 
-  const eqs = useMemo(() => items.filter((r) => r.type === "equation"), [items]);
-  const arrs = useMemo(() => items.filter((r) => r.type === "array3d"), [items]);
-  const curves = useMemo(() => items.filter((r) => r.type === "curve3d"), [items]);
-  const surfaces = useMemo(() => items.filter((r) => r.type === "surface3d"), [items]);
+  const eqs = useMemo(
+    () => items.filter((r) => r.type === "equation"),
+    [items]
+  );
+  const arrs = useMemo(
+    () => items.filter((r) => r.type === "array3d"),
+    [items]
+  );
+  const curves = useMemo(
+    () => items.filter((r) => r.type === "curve3d"),
+    [items]
+  );
+  const surfaces = useMemo(
+    () => items.filter((r) => r.type === "surface3d"),
+    [items]
+  );
 
   const tags = useMemo(() => {
     const tset = new Set();
@@ -505,7 +544,15 @@ export default function LeftPanel({
     });
   }, [surfaces, q, tag]);
 
-  const QUICK = ["x", "x^2", "x^3 - 2*x", "sin(x)", "cos(x)", "exp(x)-1", "log(x+1)"];
+  const QUICK = [
+    "x",
+    "x^2",
+    "x^3 - 2*x",
+    "sin(x)",
+    "cos(x)",
+    "exp(x)-1",
+    "log(x+1)",
+  ];
 
   const openArray = (res) => {
     if (onOpenArray) return onOpenArray(res);
@@ -524,7 +571,11 @@ export default function LeftPanel({
   return (
     <aside className={cls} style={widthStyle}>
       {/* ✅ resizer는 스크롤 영역 밖(aside 직속) */}
-      <div className="lp-resizer" onPointerDown={handleResizerPointerDown} aria-hidden="true">
+      <div
+        className="lp-resizer"
+        onPointerDown={handleResizerPointerDown}
+        aria-hidden="true"
+      >
         <div className="lp-grip" aria-hidden="true">
           <span></span>
           <span></span>
@@ -547,7 +598,10 @@ export default function LeftPanel({
         {/* Open / New */}
         <div className="section">
           <div className="label">Open Graph</div>
-          <button className="btn solid" onClick={() => setShowQuick((prev) => !prev)}>
+          <button
+            className="btn solid"
+            onClick={() => setShowQuick((prev) => !prev)}
+          >
             + New Graph
           </button>
 
@@ -558,7 +612,10 @@ export default function LeftPanel({
             <ul className="quick-list">
               {QUICK.map((f) => (
                 <li key={f}>
-                  <button className="btn ghost" onClick={() => onOpenQuick?.(f)}>
+                  <button
+                    className="btn ghost"
+                    onClick={() => onOpenQuick?.(f)}
+                  >
                     {f}
                   </button>
                 </li>
@@ -602,7 +659,9 @@ export default function LeftPanel({
                 <div className="eq-head">
                   <div className="eq-title">{e.title}</div>
                   {e.updatedAt && (
-                    <div className="eq-updated">{new Date(e.updatedAt).toLocaleDateString()}</div>
+                    <div className="eq-updated">
+                      {new Date(e.updatedAt).toLocaleDateString()}
+                    </div>
                   )}
                 </div>
 
@@ -620,13 +679,19 @@ export default function LeftPanel({
                 ) : null}
 
                 <div className="eq-actions">
-                  <button className="btn solid" onClick={() => onOpenQuick?.(e.formula)} title="Open">
+                  <button
+                    className="btn solid"
+                    onClick={() => onOpenResource?.(e)}
+                    title="Open"
+                  >
                     Open
                   </button>
                 </div>
               </li>
             ))}
-            {filteredEqs.length === 0 && <li className="eq-empty">No matches.</li>}
+            {filteredEqs.length === 0 && (
+              <li className="eq-empty">No matches.</li>
+            )}
           </ul>
         </div>
 
@@ -643,13 +708,20 @@ export default function LeftPanel({
                     <div className="eq-head">
                       <div className="eq-title">{a.title}</div>
                       {a.updatedAt && (
-                        <div className="eq-updated">{new Date(a.updatedAt).toLocaleDateString()}</div>
+                        <div className="eq-updated">
+                          {new Date(a.updatedAt).toLocaleDateString()}
+                        </div>
                       )}
                     </div>
 
-                    <MiniArrayPreview content={a.content} width={120} height={60} />
+                    <MiniArrayPreview
+                      content={a.content}
+                      width={120}
+                      height={60}
+                    />
                     <div className="eq-formula">
-                      Size: {dims.X}×{dims.Y}×{dims.Z} &nbsp; | &nbsp; Non-zero: {nnz}
+                      Size: {dims.X}×{dims.Y}×{dims.Z} &nbsp; | &nbsp; Non-zero:{" "}
+                      {nnz}
                     </div>
 
                     {a.tags?.length ? (
@@ -663,14 +735,20 @@ export default function LeftPanel({
                     ) : null}
 
                     <div className="eq-actions">
-                      <button className="btn solid" onClick={() => openArray(a)} title="Open 3D Array">
+                      <button
+                        className="btn solid"
+                        onClick={() => openArray(a)}
+                        title="Open 3D Array"
+                      >
                         Open
                       </button>
                     </div>
                   </li>
                 );
               })}
-              {filteredArrs.length === 0 && <li className="eq-empty">No matches.</li>}
+              {filteredArrs.length === 0 && (
+                <li className="eq-empty">No matches.</li>
+              )}
             </ul>
           </div>
         )}
@@ -689,8 +767,10 @@ export default function LeftPanel({
                   s.surface3d?.zExpr ??
                   s.surface3d?.formula ??
                   "";
-                const xRange = s.xRange ?? s.surface3d?.xRange ?? [s.xMin, s.xMax];
-                const yRange = s.yRange ?? s.surface3d?.yRange ?? [s.yMin, s.yMax];
+                const xRange = s.xRange ??
+                  s.surface3d?.xRange ?? [s.xMin, s.xMax];
+                const yRange = s.yRange ??
+                  s.surface3d?.yRange ?? [s.yMin, s.yMax];
                 const xMin = xRange?.[0] ?? s.xMin ?? s.surface3d?.xMin ?? -3;
                 const xMax = xRange?.[1] ?? s.xMax ?? s.surface3d?.xMax ?? 3;
                 const yMin = yRange?.[0] ?? s.yMin ?? s.surface3d?.yMin ?? -3;
@@ -701,16 +781,20 @@ export default function LeftPanel({
                     <div className="eq-head">
                       <div className="eq-title">{s.title}</div>
                       {s.updatedAt && (
-                        <div className="eq-updated">{new Date(s.updatedAt).toLocaleDateString()}</div>
+                        <div className="eq-updated">
+                          {new Date(s.updatedAt).toLocaleDateString()}
+                        </div>
                       )}
                     </div>
 
                     <MiniSurfacePreview surface={s} width={140} height={64} />
-                    <div className="eq-formula" style={{ fontFamily: "monospace", fontSize: 11 }}>
+                    <div
+                      className="eq-formula"
+                      style={{ fontFamily: "monospace", fontSize: 11 }}
+                    >
                       z = {String(expr || "").slice(0, 80)}
                       {String(expr || "").length > 80 ? "…" : ""}
-                      <br />
-                      x ∈ [{xMin}, {xMax}], y ∈ [{yMin}, {yMax}]
+                      <br />x ∈ [{xMin}, {xMax}], y ∈ [{yMin}, {yMax}]
                     </div>
 
                     {s.tags?.length ? (
@@ -724,14 +808,20 @@ export default function LeftPanel({
                     ) : null}
 
                     <div className="eq-actions">
-                      <button className="btn solid" onClick={() => onOpenResource?.(s)} title="Open 3D Surface">
+                      <button
+                        className="btn solid"
+                        onClick={() => onOpenResource?.(s)}
+                        title="Open 3D Surface"
+                      >
                         Open
                       </button>
                     </div>
                   </li>
                 );
               })}
-              {filteredSurfaces.length === 0 && <li className="eq-empty">No matches.</li>}
+              {filteredSurfaces.length === 0 && (
+                <li className="eq-empty">No matches.</li>
+              )}
             </ul>
           </div>
         )}
@@ -746,19 +836,28 @@ export default function LeftPanel({
                   <div className="eq-head">
                     <div className="eq-title">{c.title}</div>
                     {c.updatedAt && (
-                      <div className="eq-updated">{new Date(c.updatedAt).toLocaleDateString()}</div>
+                      <div className="eq-updated">
+                        {new Date(c.updatedAt).toLocaleDateString()}
+                      </div>
                     )}
                   </div>
 
                   <MiniCurvePreview curve={c} width={160} height={64} />
-                  <div className="eq-formula" style={{ fontFamily: "monospace", fontSize: 11 }}>
+                  <div
+                    className="eq-formula"
+                    style={{ fontFamily: "monospace", fontSize: 11 }}
+                  >
                     x(t): {c.x}
                     <br />
                     y(t): {c.y}
                     <br />
                     z(t): {c.z}
                     <br />
-                    {Array.isArray(c.tRange) && c.tRange.length === 2 && <>t ∈ [{c.tRange[0]}, {c.tRange[1]}]</>}
+                    {Array.isArray(c.tRange) && c.tRange.length === 2 && (
+                      <>
+                        t ∈ [{c.tRange[0]}, {c.tRange[1]}]
+                      </>
+                    )}
                   </div>
 
                   {c.tags?.length ? (
@@ -772,18 +871,26 @@ export default function LeftPanel({
                   ) : null}
 
                   <div className="eq-actions">
-                    <button className="btn solid" onClick={() => onOpenResource?.(c)} title="Open 3D Curve">
+                    <button
+                      className="btn solid"
+                      onClick={() => onOpenResource?.(c)}
+                      title="Open 3D Curve"
+                    >
                       Open
                     </button>
                   </div>
                 </li>
               ))}
-              {filteredCurves.length === 0 && <li className="eq-empty">No matches.</li>}
+              {filteredCurves.length === 0 && (
+                <li className="eq-empty">No matches.</li>
+              )}
             </ul>
           </div>
         )}
 
-        <div className="note">Tip: 상단 탭을 드래그해 오른쪽으로 떼면 VSCode처럼 화면이 분할돼요.</div>
+        <div className="note">
+          Tip: 상단 탭을 드래그해 오른쪽으로 떼면 VSCode처럼 화면이 분할돼요.
+        </div>
       </div>
     </aside>
   );
