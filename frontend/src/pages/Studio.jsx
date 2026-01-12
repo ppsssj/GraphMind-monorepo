@@ -765,52 +765,52 @@ export default function Studio() {
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
 
   const [vaultResources, setVaultResources] = useState([]);
-const [vaultLoading, setVaultLoading] = useState(false);
-const [vaultError, setVaultError] = useState("");
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultError, setVaultError] = useState("");
 
-const refreshVaultResources = useCallback(async () => {
-  setVaultLoading(true);
-  setVaultError("");
-  try {
-    // full로 받아야 curve/surface/studio 이동에 필요한 필드가 충분함
-    const items = await api.listVaultItems({ view: "full" });
-    const arr = Array.isArray(items) ? items : [];
-    setVaultResources(arr);
-
-    // (선택) fallback 캐시
+  const refreshVaultResources = useCallback(async () => {
+    setVaultLoading(true);
+    setVaultError("");
     try {
-      localStorage.setItem("vaultResources", JSON.stringify(arr));
-    } catch {}
-  } catch (e) {
-    const msg = e?.message || String(e);
-    setVaultError(msg);
+      // full로 받아야 curve/surface/studio 이동에 필요한 필드가 충분함
+      const items = await api.listVaultItems({ view: "full" });
+      const arr = Array.isArray(items) ? items : [];
+      setVaultResources(arr);
 
-    // fallback: localStorage → dummy
-    try {
-      const raw = localStorage.getItem("vaultResources");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setVaultResources(parsed);
-        else setVaultResources(dummyResources);
-      } else {
+      // (선택) fallback 캐시
+      try {
+        localStorage.setItem("vaultResources", JSON.stringify(arr));
+      } catch {}
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setVaultError(msg);
+
+      // fallback: localStorage → dummy
+      try {
+        const raw = localStorage.getItem("vaultResources");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) setVaultResources(parsed);
+          else setVaultResources(dummyResources);
+        } else {
+          setVaultResources(dummyResources);
+        }
+      } catch {
         setVaultResources(dummyResources);
       }
-    } catch {
-      setVaultResources(dummyResources);
-    }
 
-    if (msg === "UNAUTHORIZED") {
-      // 필요하면 intro로 보내는 처리도 가능
-      // navigate("/", { replace: true });
+      if (Number(e?.status) === 401) {
+        // 필요하면 intro로 보내는 처리도 가능
+        // navigate("/", { replace: true });
+      }
+    } finally {
+      setVaultLoading(false);
     }
-  } finally {
-    setVaultLoading(false);
-  }
-}, []);
+  }, []);
 
-useEffect(() => {
-  refreshVaultResources();
-}, [refreshVaultResources]);
+  useEffect(() => {
+    refreshVaultResources();
+  }, [refreshVaultResources]);
 
   // ✅ equation 타입만 필터링해서 LeftPanel "Equations" 섹션에 사용
   const equationsFromVault = useMemo(
@@ -991,6 +991,17 @@ useEffect(() => {
     right: { ids: [], activeId: null },
   });
 
+  // ✅ 새로고침/탭닫기 시점에 최신 active tab을 가져오기 위한 ref
+  const panesRef = useRef(panes);
+  const focusedPaneRef = useRef(focusedPane);
+
+  useEffect(() => {
+    panesRef.current = panes;
+  }, [panes]);
+  useEffect(() => {
+    focusedPaneRef.current = focusedPane;
+  }, [focusedPane]);
+
   // 분할바 드래그
   const [leftPct, setLeftPct] = useState(55);
   const draggingRef = useRef(false);
@@ -1104,6 +1115,340 @@ useEffect(() => {
     };
   }, []);
 
+  // ── Vault persistence (backend) ────────────────────────────────────────────
+  const isUnauthorized = (err) => Number(err?.status) === 401;
+
+  // ✅ vault PATCH 호환( apiClient에 patchVaultItem/patchVaultContent가 없으면 Studio에서 직접 호출 )
+
+  const vaultRequest = useCallback(
+    async (path, { method = "PATCH", body } = {}) => {
+      const token = localStorage.getItem("gm_token") || "";
+
+      const res = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+
+      const raw = await res.text();
+      let parsed = null;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        parsed = raw;
+      }
+
+      if (!res.ok) {
+        const err = new Error("API_ERROR");
+        err.status = res.status;
+        err.body = parsed;
+        throw err;
+      }
+      return parsed;
+    },
+    []
+  );
+
+  const patchVaultItemCompat = useCallback(
+    (vaultId, patch) =>
+      api.patchVaultItem
+        ? api.patchVaultItem(vaultId, patch)
+        : vaultRequest(`/api/v1/vault/items/${vaultId}`, {
+            method: "PATCH",
+            body: patch,
+          }),
+    [vaultRequest]
+  );
+
+  const patchVaultContentCompat = useCallback(
+    (vaultId, content) =>
+      api.patchVaultContent
+        ? api.patchVaultContent(vaultId, content)
+        : vaultRequest(`/api/v1/vault/items/${vaultId}/content`, {
+            method: "PATCH",
+            body: content,
+          }),
+    [vaultRequest]
+  );
+
+  const lastEqSaveSigRef = useRef({});
+
+  const patchVaultLocal = useCallback((vaultId, patch) => {
+    if (!vaultId || !patch || typeof patch !== "object") return;
+
+    // undefined 값은 덮어쓰지 않도록 정리
+    const clean = Object.fromEntries(
+      Object.entries(patch).filter(([, v]) => v !== undefined)
+    );
+
+    setVaultResources((prev) => {
+      const idx = prev.findIndex((n) => n.id === vaultId);
+      if (idx === -1) return prev;
+
+      const updated = {
+        ...prev[idx],
+        ...clean,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const next = [...prev];
+      next[idx] = updated;
+
+      try {
+        localStorage.setItem(VAULT_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.error("Failed to update vaultResources cache:", e);
+      }
+
+      return next;
+    });
+  }, []);
+
+  const persistVaultMeta = useCallback(async (vaultId, meta) => {
+    if (!vaultId) return;
+    try {
+      await api.patchVaultMeta(vaultId, meta || {});
+    } catch (err) {
+      if (isUnauthorized(err)) setVaultError("UNAUTHORIZED");
+      console.error("[vault] meta save failed:", err);
+      throw err;
+    }
+  }, []);
+
+  const persistVaultContent = useCallback(async (vaultId, content) => {
+    if (!vaultId) return;
+    try {
+      await patchVaultContentCompat(vaultId, content);
+    } catch (err) {
+      // backend가 /content 엔드포인트를 제공하지 않는 경우 fallback
+      if (Number(err?.status) === 404) {
+        try {
+          await patchVaultItemCompat(vaultId, { content });
+
+          return;
+        } catch (err2) {
+          if (isUnauthorized(err2)) setVaultError("UNAUTHORIZED");
+          console.error("[vault] content save fallback failed:", err2);
+          throw err2;
+        }
+      }
+
+      if (isUnauthorized(err)) setVaultError("UNAUTHORIZED");
+      console.error("[vault] content save failed:", err);
+      throw err;
+    }
+  }, []);
+
+  const persistVaultItemPatch = useCallback(async (vaultId, patch) => {
+    if (!vaultId) return;
+    try {
+      await patchVaultItemCompat(vaultId, patch || {});
+    } catch (err) {
+      if (isUnauthorized(err)) setVaultError("UNAUTHORIZED");
+      console.error("[vault] item patch failed:", err);
+      throw err;
+    }
+  }, []);
+
+  const buildEquationContent = useCallback((payload) => {
+    const pts = Array.isArray(payload?.points) ? payload.points : [];
+    return {
+      kind: "equation_graph",
+      points: pts.map((p) => ({
+        id: p?.id,
+        x: Number(p?.x) || 0,
+        y: Number(p?.y) || 0,
+      })),
+      domain: {
+        xmin: Number(payload?.xmin),
+        xmax: Number(payload?.xmax),
+      },
+      view: {
+        gridStep: Number(payload?.gridStep),
+        gridMode: payload?.gridMode,
+        minorDiv: Number(payload?.minorDiv),
+        viewMode: payload?.viewMode,
+        editMode: payload?.editMode,
+      },
+      rule: {
+        degree: Number(payload?.degree),
+        ruleMode: payload?.ruleMode,
+        rulePolyDegree: Number(payload?.rulePolyDegree),
+      },
+    };
+  }, []);
+
+  const persistEquation = useCallback(
+    (vaultId, payload) => {
+      if (!vaultId) return;
+
+      const equation = normalizeFormula(
+        String(payload?.equation ?? payload?.formula ?? "x")
+      );
+
+      const points = Array.isArray(payload?.points) ? payload.points : [];
+      const content = buildEquationContent({ ...payload, points });
+
+      // 동일 payload 중복 저장 방지 (drag finalize/commitRule 등에서 중복 호출될 수 있음)
+      const sig =
+        equation +
+        "|" +
+        String(payload?.xmin ?? "") +
+        "|" +
+        String(payload?.xmax ?? "") +
+        "|" +
+        points
+          .map((p) => `${Number(p?.x) || 0},${Number(p?.y) || 0}`)
+          .join(";");
+      if (lastEqSaveSigRef.current[vaultId] === sig) return;
+      lastEqSaveSigRef.current[vaultId] = sig;
+
+      // UI는 즉시 갱신 (optimistic)
+      patchVaultLocal(vaultId, { formula: equation, content });
+
+      // 네트워크 저장은 비동기
+      void (async () => {
+        try {
+          await persistVaultMeta(vaultId, { formula: equation });
+          await persistVaultContent(vaultId, content);
+        } catch (err) {
+          // 이미 콘솔 로깅/UNAUTHORIZED 처리는 내부에서 수행
+        }
+      })();
+    },
+    [
+      buildEquationContent,
+      patchVaultLocal,
+      persistVaultContent,
+      persistVaultMeta,
+    ]
+  );
+
+  const persistCurve3D = useCallback(
+    (vaultId, curve3d) => {
+      if (!vaultId) return;
+
+      // ✅ content는 curve3d 객체 자체여야 createTab()이 정상 로딩합니다.
+      const content = cloneCurve3D(curve3d);
+
+      // ✅ 백엔드 VaultItemPatch 스펙에 맞춤: content + samples
+      const payload = {
+        samples: content?.samples,
+        content, // <-- 핵심
+      };
+
+      patchVaultLocal(vaultId, payload);
+
+      void (async () => {
+        try {
+          await persistVaultItemPatch(vaultId, payload);
+        } catch (err) {}
+      })();
+    },
+    [patchVaultLocal, persistVaultItemPatch]
+  );
+
+  const persistSurface3D = useCallback(
+    (vaultId, surface3d) => {
+      if (!vaultId) return;
+
+      // ✅ content는 surface3d 객체 자체여야 createTab()이 정상 로딩합니다.
+      const content = cloneSurface3D(surface3d);
+
+      // ✅ 백엔드 VaultItemPatch 스펙에 맞춤: content + expr + samples(해상도)
+      const payload = {
+        expr: content?.expr,
+        samples: content?.nx ?? content?.samples, // nx를 대표 샘플로 사용
+        content, // <-- 핵심
+      };
+
+      patchVaultLocal(vaultId, payload);
+
+      void (async () => {
+        try {
+          await persistVaultItemPatch(vaultId, payload);
+        } catch (err) {}
+      })();
+    },
+    [patchVaultLocal, persistVaultItemPatch]
+  );
+
+  // ✅ 새로고침/탭닫기 대비: keepalive 저장(요청이 끊기지 않도록)
+  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080";
+
+  const flushActiveTabSave = useCallback(() => {
+    const fp = focusedPaneRef.current || "left";
+    const activeId = panesRef.current?.[fp]?.activeId;
+    if (!activeId) return;
+
+    const s = tabStateRef.current?.[activeId];
+    if (!s?.vaultId) return;
+
+    let patch = null;
+
+    if (s.type === "equation") {
+      const equation = normalizeFormula(s.equation);
+      const content = buildEquationContent({
+        points: s.points,
+        xmin: s.xmin,
+        xmax: s.xmax,
+        gridStep: s.gridStep,
+        gridMode: s.gridMode,
+        minorDiv: s.minorDiv,
+        viewMode: s.viewMode,
+        editMode: s.editMode,
+        ruleMode: s.ruleMode,
+        rulePolyDegree: s.rulePolyDegree,
+        degree: s.degree,
+      });
+      // ✅ 한번의 PATCH로 formula+content 동시 저장(가장 안정적)
+      patch = { formula: equation, content };
+    } else if (s.type === "curve3d") {
+      const content = cloneCurve3D(s.curve3d);
+      patch = { content, samples: content?.samples };
+    } else if (s.type === "surface3d") {
+      const content = cloneSurface3D(s.surface3d);
+      patch = { content, expr: content?.expr, samples: content?.nx ?? content?.samples };
+    } else {
+      return;
+    }
+
+    const token = localStorage.getItem("gm_token") || "";
+
+    // keepalive: 페이지 언로드 중에도 전송 시도
+    try {
+      fetch(`${API_BASE}/api/v1/vault/items/${s.vaultId}`, {
+        method: "PATCH",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(patch),
+      });
+    } catch (e) {
+      // ignore
+    }
+  }, [buildEquationContent]);
+  useEffect(() => {
+    const onPageHide = () => flushActiveTabSave();
+    const onVisChange = () => {
+      if (document.visibilityState === "hidden") flushActiveTabSave();
+    };
+
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisChange);
+
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisChange);
+    };
+  }, [flushActiveTabSave]);
+
   const finalizeMoveTxn = useCallback(
     (tabId) => {
       const txn = dragTxnRef.current;
@@ -1146,6 +1491,24 @@ useEffect(() => {
             vaultId: txn.vaultId,
           });
           hist.redo.length = 0;
+
+          // ✅ vault 연결 탭이면 수식+그래프(points)까지 백엔드 저장
+          if (txn.vaultId) {
+            persistEquation(txn.vaultId, {
+              equation: after.equation,
+              points: after.points,
+              xmin: cur.xmin,
+              xmax: cur.xmax,
+              gridStep: cur.gridStep,
+              gridMode: cur.gridMode,
+              minorDiv: cur.minorDiv,
+              viewMode: cur.viewMode,
+              editMode: cur.editMode,
+              ruleMode: cur.ruleMode,
+              rulePolyDegree: cur.rulePolyDegree,
+              degree: cur.degree,
+            });
+          }
         }
 
         dragTxnRef.current = null;
@@ -1168,6 +1531,8 @@ useEffect(() => {
             vaultId: txn.vaultId,
           });
           hist.redo.length = 0;
+
+          if (txn.vaultId) persistCurve3D(txn.vaultId, after.curve3d);
         }
 
         dragTxnRef.current = null;
@@ -1190,6 +1555,8 @@ useEffect(() => {
             vaultId: txn.vaultId,
           });
           hist.redo.length = 0;
+
+          if (txn.vaultId) persistSurface3D(txn.vaultId, after.surface3d);
         }
 
         dragTxnRef.current = null;
@@ -1198,7 +1565,7 @@ useEffect(() => {
 
       dragTxnRef.current = null;
     },
-    [ensureHistory]
+    [ensureHistory, persistEquation, persistCurve3D, persistSurface3D]
   );
 
   const scheduleFinalizeMoveTxn = useCallback(
@@ -1312,10 +1679,26 @@ useEffect(() => {
           };
         });
 
-        if (vaultIdForUpdate) updateVaultFormula(vaultIdForUpdate, normEq);
+        if (vaultIdForUpdate) {
+          const base = tabStateRef.current?.[tabId];
+          persistEquation(vaultIdForUpdate, {
+            equation: normEq,
+            points: (snap.points || []).map((p) => ({ ...p })),
+            xmin: base?.xmin,
+            xmax: base?.xmax,
+            gridStep: base?.gridStep,
+            gridMode: base?.gridMode,
+            minorDiv: base?.minorDiv,
+            viewMode: base?.viewMode,
+            editMode: base?.editMode,
+            ruleMode: base?.ruleMode,
+            rulePolyDegree: base?.rulePolyDegree,
+            degree: base?.degree,
+          });
+        }
       }
     },
-    [updateVaultFormula]
+    [persistEquation]
   );
 
   const undoMove = useCallback(() => {
@@ -1425,6 +1808,24 @@ useEffect(() => {
             },
           }));
           scheduleFinalizeMoveTxn(tabId);
+
+          if (cur.vaultId) {
+            persistEquation(cur.vaultId, {
+              equation: cur.equation,
+              points: pts,
+              xmin: cur.xmin,
+              xmax: cur.xmax,
+              gridStep: cur.gridStep,
+              gridMode: cur.gridMode,
+              minorDiv: cur.minorDiv,
+              viewMode: cur.viewMode,
+              editMode: cur.editMode,
+              ruleMode: cur.ruleMode,
+              rulePolyDegree: cur.rulePolyDegree,
+              degree: cur.degree,
+            });
+          }
+
           return;
         }
 
@@ -1441,6 +1842,24 @@ useEffect(() => {
             },
           }));
           scheduleFinalizeMoveTxn(tabId);
+
+          if (cur.vaultId) {
+            persistEquation(cur.vaultId, {
+              equation: cur.equation,
+              points: pts,
+              xmin: cur.xmin,
+              xmax: cur.xmax,
+              gridStep: cur.gridStep,
+              gridMode: cur.gridMode,
+              minorDiv: cur.minorDiv,
+              viewMode: cur.viewMode,
+              editMode: cur.editMode,
+              ruleMode: cur.ruleMode,
+              rulePolyDegree: cur.rulePolyDegree,
+              degree: cur.degree,
+            });
+          }
+
           return;
         }
 
@@ -1465,9 +1884,25 @@ useEffect(() => {
             [tabId]: { ...t.byId[tabId], title: titleFromFormula(nextEq) },
           },
         }));
-        updateVaultFormula(cur.vaultId, nextEq);
 
         scheduleFinalizeMoveTxn(tabId);
+
+        if (cur.vaultId) {
+          persistEquation(cur.vaultId, {
+            equation: nextEq,
+            points: snapped,
+            xmin: cur.xmin,
+            xmax: cur.xmax,
+            gridStep: cur.gridStep,
+            gridMode: cur.gridMode,
+            minorDiv: cur.minorDiv,
+            viewMode: cur.viewMode,
+            editMode: cur.editMode,
+            ruleMode: cur.ruleMode,
+            rulePolyDegree: cur.rulePolyDegree,
+            degree: cur.degree,
+          });
+        }
       };
 
       return {
@@ -1549,6 +1984,24 @@ useEffect(() => {
               },
             }));
             scheduleFinalizeMoveTxn(tabId);
+
+            if (cur.vaultId) {
+              persistEquation(cur.vaultId, {
+                equation: cur.equation,
+                points: nextPts,
+                xmin: cur.xmin,
+                xmax: cur.xmax,
+                gridStep: cur.gridStep,
+                gridMode: cur.gridMode,
+                minorDiv: cur.minorDiv,
+                viewMode: cur.viewMode,
+                editMode: cur.editMode,
+                ruleMode: cur.ruleMode,
+                rulePolyDegree: cur.rulePolyDegree,
+                degree: cur.degree,
+              });
+            }
+
             return;
           }
 
@@ -1579,6 +2032,24 @@ useEffect(() => {
               },
             }));
             scheduleFinalizeMoveTxn(tabId);
+
+            if (cur.vaultId) {
+              persistEquation(cur.vaultId, {
+                equation: cur.equation,
+                points: nextPts,
+                xmin: cur.xmin,
+                xmax: cur.xmax,
+                gridStep: cur.gridStep,
+                gridMode: cur.gridMode,
+                minorDiv: cur.minorDiv,
+                viewMode: cur.viewMode,
+                editMode: cur.editMode,
+                ruleMode: cur.ruleMode,
+                rulePolyDegree: cur.rulePolyDegree,
+                degree: cur.degree,
+              });
+            }
+
             return;
           }
 
@@ -1592,7 +2063,7 @@ useEffect(() => {
         ruleError: s.ruleError ?? null,
       };
     },
-    [tabState, updateVaultFormula, beginMoveTxn, scheduleFinalizeMoveTxn]
+    [tabState, persistEquation, beginMoveTxn, scheduleFinalizeMoveTxn]
   );
 
   // ── AI graph commands: extrema/roots/intersections → markers ─────────────────
@@ -2325,6 +2796,8 @@ useEffect(() => {
       tabTitle = null,
       vaultId = null
     ) => {
+      const effectiveVaultId = vaultId ?? raw?.id ?? tabContent?.id ?? null;
+
       const id = uid();
       const type = tabType || "equation";
       const eq = type === "equation" ? normalizeFormula(raw ?? "x") : undefined;
@@ -2459,7 +2932,7 @@ useEffect(() => {
           ruleError: null,
           points: type === "equation" ? makeInitialPoints(eq) : [],
           ver: 0,
-          vaultId,
+          vaultId: effectiveVaultId,
           markers: [],
         },
       }));
@@ -2819,10 +3292,16 @@ useEffect(() => {
     (tabId, patch) => {
       if (!tabId) return;
 
-      if (patch && typeof patch === "object" && "markers" in patch)
-        beginCurve3DTxn(tabId);
-
       const commitLike = isCurve3DCommitPatch(patch);
+
+      // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
+      if (
+        patch &&
+        typeof patch === "object" &&
+        ("markers" in patch || commitLike)
+      ) {
+        beginCurve3DTxn(tabId);
+      }
 
       setTabState((st) => {
         const cur = st[tabId];
@@ -2856,13 +3335,16 @@ useEffect(() => {
             hist.redo.length = 0;
           }
 
+          // ✅ vault 연결이면 backend 저장 (commit-like patch)
+          if (txn.vaultId) persistCurve3D(txn.vaultId, nextCurve3d);
+
           dragTxnRef.current = null;
         }
 
         return next;
       });
     },
-    [beginCurve3DTxn, ensureHistory]
+    [beginCurve3DTxn, ensureHistory, persistCurve3D]
   );
 
   // ✅ surface3d 상태 업데이트
@@ -2870,10 +3352,16 @@ useEffect(() => {
     (tabId, patch) => {
       if (!tabId) return;
 
-      if (patch && typeof patch === "object" && "markers" in patch)
-        beginSurface3DTxn(tabId);
-
       const commitLike = isSurface3DCommitPatch(patch);
+
+      // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
+      if (
+        patch &&
+        typeof patch === "object" &&
+        ("markers" in patch || commitLike)
+      ) {
+        beginSurface3DTxn(tabId);
+      }
 
       setTabState((st) => {
         const cur = st[tabId];
@@ -2911,68 +3399,127 @@ useEffect(() => {
             hist.redo.length = 0;
           }
 
+          // ✅ vault 연결이면 backend 저장 (commit-like patch)
+          if (txn.vaultId) persistSurface3D(txn.vaultId, nextSurface3d);
+
           dragTxnRef.current = null;
         }
 
         return next;
       });
     },
-    [beginSurface3DTxn, ensureHistory]
+    [beginSurface3DTxn, ensureHistory, persistSurface3D]
   );
 
   const applyEquation = () => {
     if (!active || !activeId) return;
     if (active.type !== "equation") return;
-    const fn = exprToFn(active.equation);
 
-    if (active.vaultId) updateVaultFormula(active.vaultId, active.equation);
+    const equation = normalizeFormula(active.equation);
+    const fn = exprToFn(equation);
 
+    // 탭 제목 갱신
     setTabs((t) => ({
       ...t,
       byId: {
         ...t.byId,
         [activeId]: {
           ...t.byId[activeId],
-          title: titleFromFormula(active.equation),
+          title: titleFromFormula(equation),
         },
       },
     }));
 
+    // points 재계산 + 저장 payload 준비
+    const s = tabStateRef.current?.[activeId];
+    if (!s || s.type !== "equation") return;
+
+    const xs = (s.points || []).map((p) => p.x);
+    const ys = xs.map((x) => {
+      const y = fn(x);
+      return Number.isFinite(y) ? y : 0;
+    });
+
+    const d = Math.min(s.degree, Math.max(0, (s.points || []).length - 1));
+    const coeffs = fitPolyCoeffs(xs, ys, d);
+    const fitted = coeffsToFn(coeffs);
+    const nextPts = xs.map((x, i) => ({
+      ...(s.points?.[i] || { id: i }),
+      x,
+      y: fitted(x),
+    }));
+
     setTabState((st) => {
-      const s = st[activeId];
-      if (!s || s.type !== "equation") return st;
-      const xs = s.points.map((p) => p.x);
-      const ys = xs.map((x) => {
-        const y = fn(x);
-        return Number.isFinite(y) ? y : 0;
-      });
-      const d = Math.min(s.degree, Math.max(0, s.points.length - 1));
-      const coeffs = fitPolyCoeffs(xs, ys, d);
-      const fitted = coeffsToFn(coeffs);
-      const nextPts = xs.map((x, i) => ({ ...s.points[i], y: fitted(x) }));
+      const cur = st[activeId];
+      if (!cur || cur.type !== "equation") return st;
       return {
         ...st,
-        [activeId]: { ...s, points: nextPts, ver: (s.ver ?? 0) + 1 },
+        [activeId]: {
+          ...cur,
+          equation,
+          points: nextPts,
+          ver: (cur.ver ?? 0) + 1,
+        },
       };
     });
+
+    // ✅ vault 연결 탭이면 백엔드까지 저장
+    if (s.vaultId) {
+      persistEquation(s.vaultId, {
+        equation,
+        points: nextPts,
+        xmin: s.xmin,
+        xmax: s.xmax,
+        gridStep: s.gridStep,
+        gridMode: s.gridMode,
+        minorDiv: s.minorDiv,
+        viewMode: s.viewMode,
+        editMode: s.editMode,
+        ruleMode: s.ruleMode,
+        rulePolyDegree: s.rulePolyDegree,
+        degree: s.degree,
+      });
+    }
   };
 
   const resampleDomain = () => {
     if (!activeId) return;
+
+    const s = tabStateRef.current?.[activeId];
+    if (!s || s.type !== "equation") return;
+
+    const fn = exprToFn(s.equation);
+    const xs = Array.from({ length: 8 }, (_, i) => {
+      const t = i / 7;
+      return s.xmin + (s.xmax - s.xmin) * t;
+    });
+    const pts = xs.map((x, i) => ({ id: i, x, y: Number(fn(x)) || 0 }));
+
     setTabState((st) => {
-      const s = st[activeId];
-      if (!s || s.type !== "equation") return st;
-      const fn = exprToFn(s.equation);
-      const xs = Array.from({ length: 8 }, (_, i) => {
-        const t = i / 7;
-        return s.xmin + (s.xmax - s.xmin) * t;
-      });
-      const pts = xs.map((x, i) => ({ id: i, x, y: Number(fn(x)) || 0 }));
+      const cur = st[activeId];
+      if (!cur || cur.type !== "equation") return st;
       return {
         ...st,
-        [activeId]: { ...s, points: pts, ver: (s.ver ?? 0) + 1 },
+        [activeId]: { ...cur, points: pts, ver: (cur.ver ?? 0) + 1 },
       };
     });
+
+    if (s.vaultId) {
+      persistEquation(s.vaultId, {
+        equation: normalizeFormula(s.equation),
+        points: pts,
+        xmin: s.xmin,
+        xmax: s.xmax,
+        gridStep: s.gridStep,
+        gridMode: s.gridMode,
+        minorDiv: s.minorDiv,
+        viewMode: s.viewMode,
+        editMode: s.editMode,
+        ruleMode: s.ruleMode,
+        rulePolyDegree: s.rulePolyDegree,
+        degree: s.degree,
+      });
+    }
   };
 
   function TabBar({ paneKey }) {
@@ -3044,16 +3591,18 @@ useEffect(() => {
             }
             setFocusedPane("left");
           }}
-          onOpenArray={(res) =>
-            createTab(null, "left", "array3d", res.content, res.title)
-          }
+          onOpenArray={(res) => {
+            const vid = res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
+            return createTab(null, "left", "array3d", res.content, res.title, vid);
+          }}
           onOpenResource={(res) => {
-            if (res.id != null) {
+            const vid = res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
+            if (vid != null) {
               const paneKeys = ["left", "right"];
               for (const paneKey of paneKeys) {
                 const paneTabIds = panes[paneKey].ids;
                 const foundId = paneTabIds.find(
-                  (tid) => tabState[tid]?.vaultId === res.id
+                  (tid) => tabState[tid]?.vaultId === vid
                 );
                 if (foundId) {
                   setActive(paneKey, foundId);
@@ -3064,7 +3613,7 @@ useEffect(() => {
             }
 
             if (res.type === "curve3d") {
-              createTab(res, "left", "curve3d", res, res.title, res.id);
+              createTab(res, "left", "curve3d", res, res.title, vid);
             } else if (res.type === "equation") {
               createTab(
                 res.formula,
@@ -3072,7 +3621,7 @@ useEffect(() => {
                 "equation",
                 null,
                 res.title,
-                res.id
+                vid
               );
             } else if (res.type === "array3d") {
               createTab(
@@ -3081,7 +3630,7 @@ useEffect(() => {
                 "array3d",
                 res.content,
                 res.title,
-                res.id
+                vid
               );
             } else if (res.type === "surface3d") {
               const payload = res.surface3d || res;
@@ -3091,7 +3640,7 @@ useEffect(() => {
                 "surface3d",
                 payload,
                 res.title,
-                res.id ?? null
+                vid
               );
             }
           }}

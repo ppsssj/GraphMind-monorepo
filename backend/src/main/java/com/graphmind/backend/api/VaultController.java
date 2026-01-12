@@ -1,7 +1,6 @@
 package com.graphmind.backend.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.graphmind.backend.domain.LinkRef;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
 import com.graphmind.backend.service.VaultService;
@@ -11,10 +10,20 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Set;
 
+/**
+ * ✅ 405 Method Not Allowed / 404 Not Found 해결 포인트
+ * - 프론트가 PATCH /api/v1/vault/items/{id} 또는 /content 로 저장을 시도함
+ * - 기존 백엔드에 해당 매핑이 없어서:
+ *   - /content: 404 (경로 없음)
+ *   - /items/{id}: 405 (경로는 있으나 PATCH 메서드 미지원)
+ *
+ * 따라서 아래 2개를 추가:
+ * - PATCH /items/{id}
+ * - PATCH /items/{id}/content
+ */
 @RestController
-@RequestMapping("/api/v1/vault/items")
+@RequestMapping("/api/v1/vault")
 public class VaultController {
 
     private final VaultService vault;
@@ -23,136 +32,83 @@ public class VaultController {
         this.vault = vault;
     }
 
-    // 프론트 요구 타입(후순위지만 array3d도 포함)
-    private static final Set<String> ALLOWED_TYPES =
-            Set.of("equation", "array3d", "curve3d", "surface3d");
+    private String userId(HttpServletRequest req) {
+        Object v = req.getAttribute("userId");
+        if (v == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED");
+        return String.valueOf(v);
+    }
 
-    public record VaultUpsertReq(
-            String title,
-            String type,
-
-            // equation / surface3d preview
-            String formula,
-            String expr,
-
-            // curve3d / surface3d
-            Integer samples,
-
-            // array3d
-            String axisOrder,
-            Integer sizeX,
-            Integer sizeY,
-            Integer sizeZ,
-
-            List<String> tags,
-            JsonNode content,
-            List<LinkRef> links
-    ) {}
-
-    public record VaultMetaPatchReq(
-            String title,
-            List<String> tags,
-            String formula
-    ) {}
-
-    @GetMapping
-    public Object list(HttpServletRequest req,
-                       @RequestParam(required = false) String tag,
-                       @RequestParam(required = false) String q,
-                       @RequestParam(defaultValue = "summary") String view) {
-
-        String userId = (String) req.getAttribute("userId");
+    // =========================
+    // List
+    // =========================
+    @GetMapping("/items")
+    public Object listItems(
+            HttpServletRequest req,
+            @RequestParam(defaultValue = "summary") String view,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) String q
+    ) {
+        String uid = userId(req);
         if ("full".equalsIgnoreCase(view)) {
-            return vault.listFull(userId, tag, q);
+            return vault.listFull(uid, tag, q);
         }
-        return vault.listSummary(userId, tag, q);
+        return vault.listSummary(uid, tag, q);
     }
 
-    @PostMapping
-    public VaultItem create(HttpServletRequest req, @RequestBody VaultUpsertReq body) {
-        String userId = (String) req.getAttribute("userId");
-        VaultService.VaultUpsert upsert = toUpsert(body, true);
-        return vault.create(userId, upsert);
+    // =========================
+    // Create / Update (full)
+    // =========================
+    @PostMapping("/items")
+    public VaultItem create(HttpServletRequest req, @RequestBody VaultService.VaultUpsert body) {
+        return vault.create(userId(req), body);
     }
 
-    @GetMapping("/{id}")
-    public VaultItem get(HttpServletRequest req, @PathVariable String id) {
-        String userId = (String) req.getAttribute("userId");
-        return vault.getOwned(userId, id);
+    @PutMapping("/items/{id}")
+    public VaultItem update(HttpServletRequest req, @PathVariable String id, @RequestBody VaultService.VaultUpsert body) {
+        return vault.update(userId(req), id, body);
     }
 
-    @PutMapping("/{id}")
-    public VaultItem update(HttpServletRequest req, @PathVariable String id, @RequestBody VaultUpsertReq body) {
-        String userId = (String) req.getAttribute("userId");
-        VaultService.VaultUpsert upsert = toUpsert(body, false);
-        return vault.update(userId, id, upsert);
+    // =========================
+    // Patch: meta only (existing pattern)
+    // =========================
+    @PatchMapping("/items/{id}/meta")
+    public VaultItem patchMeta(HttpServletRequest req, @PathVariable String id, @RequestBody VaultService.VaultMetaPatch patch) {
+        return vault.patchMeta(userId(req), id, patch);
     }
 
-    /**
-     * ✅ LeftPanel 편집(제목/태그 + equation일 때 formula만)
-     */
-    @PatchMapping("/{id}/meta")
-    public VaultItem patchMeta(HttpServletRequest req, @PathVariable String id, @RequestBody VaultMetaPatchReq body) {
-        String userId = (String) req.getAttribute("userId");
-        if (body == null) throw bad("Body is required");
-        return vault.patchMeta(userId, id, new VaultService.VaultMetaPatch(
-                body.title(),
-                body.tags(),
-                body.formula()
-        ));
+    // =========================
+    // ✅ Patch: content only (NEW)
+    // 프론트에서 { content: ... } 또는 content 자체(Json)로 보낼 수 있으므로 둘 다 지원.
+    // =========================
+    @PatchMapping("/items/{id}/content")
+    public VaultItem patchContent(HttpServletRequest req, @PathVariable String id, @RequestBody JsonNode body) {
+        JsonNode content = body;
+        if (body != null && body.has("content")) {
+            content = body.get("content");
+        }
+        return vault.patchContent(userId(req), id, content);
     }
 
-    @DeleteMapping("/{id}")
+    // =========================
+    // ✅ Patch: generic item patch (NEW)
+    // curve3d/surface3d/array3d 포함해서 필요한 필드만 PATCH 가능
+    // =========================
+    @PatchMapping("/items/{id}")
+    public VaultItem patchItem(HttpServletRequest req, @PathVariable String id, @RequestBody VaultService.VaultItemPatch patch) {
+        return vault.patchItem(userId(req), id, patch);
+    }
+
+    // =========================
+    // Get / Delete
+    // =========================
+    @GetMapping("/items/{id}")
+    public VaultItem getOne(HttpServletRequest req, @PathVariable String id) {
+        return vault.getOwned(userId(req), id);
+    }
+
+    @DeleteMapping("/items/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(HttpServletRequest req, @PathVariable String id) {
-        String userId = (String) req.getAttribute("userId");
-        vault.delete(userId, id);
-    }
-
-    // ---------------- helpers ----------------
-
-    private VaultService.VaultUpsert toUpsert(VaultUpsertReq body, boolean requireType) {
-        if (body == null) throw bad("Body is required");
-
-        String type = body.type();
-        if (requireType && (type == null || type.isBlank())) {
-            throw bad("type is required");
-        }
-        if (type != null && !type.isBlank() && !ALLOWED_TYPES.contains(type)) {
-            throw bad("type must be one of " + ALLOWED_TYPES);
-        }
-
-        // 최소한의 타입별 체크(과도한 제약은 X)
-        if ("equation".equals(type)) {
-            // 프론트는 formula를 쓰는 구조
-            if ((body.formula() == null || body.formula().isBlank())
-                    && (body.expr() == null || body.expr().isBlank())) {
-                // expr을 fallback으로 허용 (이전 데이터 호환)
-                throw bad("equation requires formula (or expr as fallback)");
-            }
-        }
-        if ("surface3d".equals(type)) {
-            if (body.expr() == null || body.expr().isBlank()) {
-                throw bad("surface3d requires expr");
-            }
-        }
-
-        return new VaultService.VaultUpsert(
-                body.title(),
-                type,
-                body.formula(),
-                body.expr(),
-                body.samples(),
-                body.axisOrder(),
-                body.sizeX(),
-                body.sizeY(),
-                body.sizeZ(),
-                body.tags(),
-                body.content(),
-                body.links()
-        );
-    }
-
-    private ResponseStatusException bad(String msg) {
-        return new ResponseStatusException(HttpStatus.BAD_REQUEST, msg);
+        vault.delete(userId(req), id);
     }
 }

@@ -1,9 +1,9 @@
 package com.graphmind.backend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.graphmind.backend.domain.LinkRef;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
-import com.graphmind.backend.domain.LinkRef;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -124,6 +124,104 @@ public class InMemoryVaultService implements VaultService {
                 now
         );
 
+        store.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(id, next);
+        return next;
+    }
+
+    // =========================
+    // ✅ NEW: content만 부분 업데이트
+    // =========================
+    @Override
+    public VaultItem patchContent(String userId, String id, JsonNode content) {
+        VaultItem prev = getOwned(userId, id);
+        Instant now = Instant.now();
+
+        VaultItem next = new VaultItem(
+                prev.id(),
+                prev.userId(),
+                prev.title(),
+                prev.type(),
+                prev.formula(),
+                prev.expr(),
+                prev.samples(),
+                prev.axisOrder(),
+                prev.sizeX(),
+                prev.sizeY(),
+                prev.sizeZ(),
+                prev.tags(),
+                content,
+                prev.links(),
+                now
+        );
+
+        next = maybeInferArrayDims(next);
+        store.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(id, next);
+        return next;
+    }
+
+    // =========================
+    // ✅ NEW: item 전체(부분) 업데이트
+    // =========================
+    @Override
+    public VaultItem patchItem(String userId, String id, VaultItemPatch patch) {
+        VaultItem prev = getOwned(userId, id);
+        Instant now = Instant.now();
+
+        // type이 바뀌면 그 type 기준으로 제약(예: formula 허용 여부)을 결정
+        String nextType = prev.type();
+        if (patch.type() != null && !patch.type().isBlank()) {
+            nextType = patch.type().trim();
+        }
+
+        String nextTitle = prev.title();
+        if (patch.title() != null) {
+            String t = patch.title().trim();
+            nextTitle = t.isBlank() ? prev.title() : t;
+        }
+
+        List<String> nextTags = patch.tags() != null ? normTags(patch.tags()) : prev.tags();
+
+        String nextAxisOrder = prev.axisOrder();
+        if (patch.axisOrder() != null) {
+            nextAxisOrder = orDefault(patch.axisOrder(), prev.axisOrder());
+        }
+
+        Integer nextSizeX = patch.sizeX() != null ? patch.sizeX() : prev.sizeX();
+        Integer nextSizeY = patch.sizeY() != null ? patch.sizeY() : prev.sizeY();
+        Integer nextSizeZ = patch.sizeZ() != null ? patch.sizeZ() : prev.sizeZ();
+
+        String nextExpr = patch.expr() != null ? patch.expr() : prev.expr();
+        Integer nextSamples = patch.samples() != null ? patch.samples() : prev.samples();
+
+        // formula는 equation 타입일 때만 의미 있게 반영 (기존 정책 유지)
+        String nextFormula = prev.formula();
+        if (patch.formula() != null && "equation".equals(nextType)) {
+            String f = patch.formula().trim();
+            nextFormula = f.isBlank() ? prev.formula() : f;
+        }
+
+        JsonNode nextContent = patch.content() != null ? patch.content() : prev.content();
+        List<LinkRef> nextLinks = patch.links() != null ? patch.links() : prev.links();
+
+        VaultItem next = new VaultItem(
+                prev.id(),
+                prev.userId(),
+                nextTitle,
+                nextType,
+                nextFormula,
+                nextExpr,
+                nextSamples,
+                nextAxisOrder,
+                nextSizeX,
+                nextSizeY,
+                nextSizeZ,
+                nextTags,
+                nextContent,
+                nextLinks,
+                now
+        );
+
+        next = maybeInferArrayDims(next);
         store.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(id, next);
         return next;
     }

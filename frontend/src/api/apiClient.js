@@ -9,7 +9,7 @@ export function setToken(token) {
   else localStorage.setItem("gm_token", token);
 }
 
-async function request(path, { method = "GET", body, headers = {} } = {}) {
+async function requestOnce(path, { method = "GET", body, headers = {} } = {}) {
   const token = getToken();
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -34,10 +34,51 @@ async function request(path, { method = "GET", body, headers = {} } = {}) {
     const err = new Error("API_ERROR");
     err.status = res.status;
     err.data = data;
+    err.method = method;
+    err.path = path;
     throw err;
   }
 
   return data;
+}
+
+// PATCH 호환: 서버가 PATCH를 허용하지 않으면 PUT(또는 POST+X-HTTP-Method-Override)로 자동 재시도
+async function request(path, opts = {}) {
+  try {
+    return await requestOnce(path, opts);
+  } catch (err) {
+    const method = String(opts?.method || "GET").toUpperCase();
+    if (Number(err?.status) === 405) {
+      if (method === "PATCH") {
+        try {
+          return await requestOnce(path, { ...opts, method: "PUT" });
+        } catch (err2) {
+          if (Number(err2?.status) === 405) {
+            return await requestOnce(path, {
+              ...opts,
+              method: "POST",
+              headers: {
+                ...(opts?.headers || {}),
+                "X-HTTP-Method-Override": "PATCH",
+              },
+            });
+          }
+          throw err2;
+        }
+      }
+      if (method === "PUT") {
+        return await requestOnce(path, {
+          ...opts,
+          method: "POST",
+          headers: {
+            ...(opts?.headers || {}),
+            "X-HTTP-Method-Override": "PUT",
+          },
+        });
+      }
+    }
+    throw err;
+  }
 }
 
 export const api = {
@@ -76,10 +117,22 @@ export const api = {
       method: "PATCH",
       body: { title, tags, formula },
     }),
+  // apiClient.js
+  updateVaultItem: (id, payload) =>
+    request(`/api/v1/vault/items/${id}`, { method: "PUT", body: payload }),
+
+  // Vault (content / full item patch)
+  patchVaultItem: (id, payload) =>
+    request(`/api/v1/vault/items/${id}`, { method: "PATCH", body: payload }),
+
+  patchVaultContent: (id, content) =>
+    request(`/api/v1/vault/items/${id}/content`, {
+      method: "PATCH",
+      body: { content },
+    }),
 
   deleteVaultItem: (id) =>
     request(`/api/v1/vault/items/${id}`, { method: "DELETE" }),
 
   logout: () => request("/api/v1/auth/logout", { method: "POST" }),
-
 };
