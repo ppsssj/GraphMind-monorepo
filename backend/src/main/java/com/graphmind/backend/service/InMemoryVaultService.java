@@ -1,18 +1,17 @@
 package com.graphmind.backend.service;
 
-//import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.JsonNode;
+
 import com.graphmind.backend.domain.LinkRef;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
+
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import java.util.Collections;
-import com.graphmind.backend.domain.LinkRef; // LinkRef 寃쎈줈???꾨줈?앺듃??留욊쾶
 
 @Service
 public class InMemoryVaultService implements VaultService {
@@ -41,6 +40,7 @@ public class InMemoryVaultService implements VaultService {
     public VaultItem create(String userId, VaultUpsert body) {
         String id = UUID.randomUUID().toString();
         Instant now = Instant.now();
+
         VaultItem item = new VaultItem(
                 id,
                 userId,
@@ -59,9 +59,7 @@ public class InMemoryVaultService implements VaultService {
                 now
         );
 
-        // array3d硫?dims ?먮룞 異붾줎(?덉쑝硫??곗꽑 ?ъ슜)
         item = maybeInferArrayDims(item);
-
         store.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(id, item);
         return item;
     }
@@ -102,7 +100,7 @@ public class InMemoryVaultService implements VaultService {
         String nextTitle = patch.title() != null ? patch.title().trim() : prev.title();
         List<String> nextTags = patch.tags() != null ? normTags(patch.tags()) : prev.tags();
 
-        // equation???뚮쭔 formula ?섏젙 ?덉슜 (洹?????낆? 臾댁떆)
+        // equation 타입만 formula 변경 허용
         String nextFormula = prev.formula();
         if ("equation".equals(prev.type()) && patch.formula() != null) {
             String f = patch.formula().trim();
@@ -132,18 +130,67 @@ public class InMemoryVaultService implements VaultService {
     }
 
     // =========================
-    // ??NEW: content留?遺遺??낅뜲?댄듃
+    // content 부분 업데이트 (/content)
     // =========================
     @Override
     public VaultItem patchContent(String userId, String id, JsonNode content) {
-        VaultItem prev = getOwned(userId, id); // ?놁쑝硫?NoSuchElementException ??ApiExceptionHandler媛 404濡?蹂??
-
+        VaultItem prev = getOwned(userId, id);
         Instant now = Instant.now();
 
         JsonNode nextContent = (content != null) ? content : prev.content();
         List<String> nextTags = (prev.tags() != null) ? prev.tags() : List.of();
         List<LinkRef> nextLinks = (prev.links() != null) ? prev.links() : Collections.emptyList();
 
+        // ✅ content 저장 시 top-level preview 필드 동기화
+        String nextExpr = prev.expr();
+        Integer nextSamples = prev.samples();
+        String type = prev.type();
+
+        if (nextContent != null && nextContent.isObject()) {
+            if ("surface3d".equals(type)) {
+                // surface3d: 대표 expr은 content.expr 우선
+                String ce = firstText(nextContent, "expr", "zExpr", "formula");
+                if (ce != null) nextExpr = ce;
+
+                // samples: samples 우선, 없으면 nx(=해상도)로 대체
+                Integer s = firstInt(nextContent, "samples");
+                if (s != null) {
+                    nextSamples = s;
+                } else {
+                    Integer nx = firstInt(nextContent, "nx");
+                    if (nx != null) nextSamples = nx;
+                }
+
+            } else if ("curve3d".equals(type)) {
+                // curve3d: samples 동기화
+                Integer s = firstInt(nextContent, "samples", "nSamples", "n");
+                if (s != null) nextSamples = s;
+
+                // curve3d: top-level expr을 x/y/z 요약 문자열로 동기화 (프리뷰/검색용)
+                String x = firstText(nextContent, "xExpr", "x");
+                String y = firstText(nextContent, "yExpr", "y");
+                String z = firstText(nextContent, "zExpr", "z");
+
+                if (x != null || y != null || z != null) {
+                    StringBuilder sb = new StringBuilder();
+                    if (x != null) sb.append("x(t)=").append(x);
+                    if (y != null) {
+                        if (sb.length() > 0) sb.append(", ");
+                        sb.append("y(t)=").append(y);
+                    }
+                    if (z != null) {
+                        if (sb.length() > 0) sb.append(", ");
+                        sb.append("z(t)=").append(z);
+                    }
+                    nextExpr = sb.toString();
+                }
+
+            } else if ("equation".equals(type)) {
+                // equation도 content로 오는 경우가 있으면 expr 요약 갱신(선택)
+                String ce = firstText(nextContent, "expr", "formula");
+                if (ce != null) nextExpr = ce;
+            }
+        }
 
         VaultItem next = new VaultItem(
                 prev.id(),
@@ -151,8 +198,8 @@ public class InMemoryVaultService implements VaultService {
                 prev.title(),
                 prev.type(),
                 prev.formula(),
-                prev.expr(),
-                prev.samples(),
+                nextExpr,       // ✅ 동기화된 expr
+                nextSamples,    // ✅ 동기화된 samples
                 prev.axisOrder(),
                 prev.sizeX(),
                 prev.sizeY(),
@@ -168,16 +215,14 @@ public class InMemoryVaultService implements VaultService {
         return next;
     }
 
-
     // =========================
-    // ??NEW: item ?꾩껜(遺遺? ?낅뜲?댄듃
+    // item 부분 업데이트 (/items patch)
     // =========================
     @Override
     public VaultItem patchItem(String userId, String id, VaultItemPatch patch) {
         VaultItem prev = getOwned(userId, id);
         Instant now = Instant.now();
 
-        // type??諛붾뚮㈃ 洹?type 湲곗??쇰줈 ?쒖빟(?? formula ?덉슜 ?щ?)??寃곗젙
         String nextType = prev.type();
         if (patch.type() != null && !patch.type().isBlank()) {
             nextType = patch.type().trim();
@@ -203,7 +248,7 @@ public class InMemoryVaultService implements VaultService {
         String nextExpr = patch.expr() != null ? patch.expr() : prev.expr();
         Integer nextSamples = patch.samples() != null ? patch.samples() : prev.samples();
 
-        // formula??equation ??낆씪 ?뚮쭔 ?섎? ?덇쾶 諛섏쁺 (湲곗〈 ?뺤콉 ?좎?)
+        // formula는 equation 타입일 때만 반영
         String nextFormula = prev.formula();
         if (patch.formula() != null && "equation".equals(nextType)) {
             String f = patch.formula().trim();
@@ -324,7 +369,7 @@ public class InMemoryVaultService implements VaultService {
         JsonNode c = item.content();
         if (c == null || !c.isArray() || c.size() == 0) return item;
 
-        // 湲곕낯 媛?? content[z][y][x]
+        // 기본 가정: content[z][y][x]
         int z = c.size();
         int y = c.get(0).isArray() ? c.get(0).size() : 0;
         int x = (y > 0 && c.get(0).get(0).isArray()) ? c.get(0).get(0).size() : 0;
@@ -339,5 +384,37 @@ public class InMemoryVaultService implements VaultService {
                 item.tags(), item.content(), item.links(), item.updatedAt()
         );
     }
-}
 
+    // ✅ content에서 텍스트 값 추출
+    private String firstText(JsonNode obj, String... keys) {
+        if (obj == null) return null;
+        for (String k : keys) {
+            JsonNode v = obj.get(k);
+            if (v != null && !v.isNull()) {
+                String s = v.asText(null);
+                if (s != null) {
+                    s = s.trim();
+                    if (!s.isBlank()) return s;
+                }
+            }
+        }
+        return null;
+    }
+
+    // ✅ content에서 int 값 추출 (숫자/숫자 문자열 모두 허용)
+    private Integer firstInt(JsonNode obj, String... keys) {
+        if (obj == null) return null;
+        for (String k : keys) {
+            JsonNode v = obj.get(k);
+            if (v == null || v.isNull()) continue;
+
+            if (v.isInt() || v.isLong() || v.isNumber()) return v.asInt();
+
+            try {
+                String s = v.asText(null);
+                if (s != null) return Integer.parseInt(s.trim());
+            } catch (Exception ignore) {}
+        }
+        return null;
+    }
+}
