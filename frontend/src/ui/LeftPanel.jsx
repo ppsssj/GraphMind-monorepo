@@ -681,7 +681,11 @@ export default function LeftPanel({
                 <div className="eq-actions">
                   <button
                     className="btn solid"
-                    onClick={() => onOpenResource?.(e)}
+                    onClick={() =>
+                      onOpenResource
+                        ? onOpenResource(e)
+                        : onOpenQuick?.(e.formula)
+                    }
                     title="Open"
                   >
                     Open
@@ -763,6 +767,9 @@ export default function LeftPanel({
                   s.expr ??
                   s.zExpr ??
                   s.formula ??
+                  s.content?.expr ??
+                  s.content?.zExpr ??
+                  s.content?.formula ??
                   s.surface3d?.expr ??
                   s.surface3d?.zExpr ??
                   s.surface3d?.formula ??
@@ -827,60 +834,71 @@ export default function LeftPanel({
         )}
 
         {/* 3D Curves */}
+        {/* 3D Curves */}
         {curves.length > 0 && (
           <div className="section">
             <div className="label">3D Curves</div>
             <ul className="eq-list">
-              {filteredCurves.map((c) => (
-                <li key={c.id} className="eq-item">
-                  <div className="eq-head">
-                    <div className="eq-title">{c.title}</div>
-                    {c.updatedAt && (
-                      <div className="eq-updated">
-                        {new Date(c.updatedAt).toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
+              {filteredCurves.map((c) => {
+                // ✅ 여기(중괄호 블록)에서 선언해야 함
+                const cx =
+                  c.x ?? c.xExpr ?? c.content?.xExpr ?? c.content?.x ?? "";
+                const cy =
+                  c.y ?? c.yExpr ?? c.content?.yExpr ?? c.content?.y ?? "";
+                const cz =
+                  c.z ?? c.zExpr ?? c.content?.zExpr ?? c.content?.z ?? "";
 
-                  <MiniCurvePreview curve={c} width={160} height={64} />
-                  <div
-                    className="eq-formula"
-                    style={{ fontFamily: "monospace", fontSize: 11 }}
-                  >
-                    x(t): {c.x}
-                    <br />
-                    y(t): {c.y}
-                    <br />
-                    z(t): {c.z}
-                    <br />
-                    {Array.isArray(c.tRange) && c.tRange.length === 2 && (
-                      <>
-                        t ∈ [{c.tRange[0]}, {c.tRange[1]}]
-                      </>
-                    )}
-                  </div>
-
-                  {c.tags?.length ? (
-                    <div className="eq-tags">
-                      {c.tags.map((t) => (
-                        <span key={t} className="chip">
-                          {t}
-                        </span>
-                      ))}
+                return (
+                  <li key={c.id} className="eq-item">
+                    <div className="eq-head">
+                      <div className="eq-title">{c.title}</div>
+                      {c.updatedAt && (
+                        <div className="eq-updated">
+                          {new Date(c.updatedAt).toLocaleDateString()}
+                        </div>
+                      )}
                     </div>
-                  ) : null}
 
-                  <div className="eq-actions">
-                    <button
-                      className="btn solid"
-                      onClick={() => onOpenResource?.(c)}
-                      title="Open 3D Curve"
+                    <MiniCurvePreview curve={c} width={160} height={64} />
+                    <div
+                      className="eq-formula"
+                      style={{ fontFamily: "monospace", fontSize: 11 }}
                     >
-                      Open
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      x(t): {cx}
+                      <br />
+                      y(t): {cy}
+                      <br />
+                      z(t): {cz}
+                      <br />
+                      {Array.isArray(c.tRange) && c.tRange.length === 2 && (
+                        <>
+                          t ∈ [{c.tRange[0]}, {c.tRange[1]}]
+                        </>
+                      )}
+                    </div>
+
+                    {c.tags?.length ? (
+                      <div className="eq-tags">
+                        {c.tags.map((t) => (
+                          <span key={t} className="chip">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="eq-actions">
+                      <button
+                        className="btn solid"
+                        onClick={() => onOpenResource?.(c)}
+                        title="Open 3D Curve"
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
               {filteredCurves.length === 0 && (
                 <li className="eq-empty">No matches.</li>
               )}

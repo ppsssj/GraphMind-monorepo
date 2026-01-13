@@ -1,6 +1,6 @@
 package com.graphmind.backend.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.graphmind.backend.domain.StudioProject;
 import com.graphmind.backend.service.StudioService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -60,3 +60,4 @@ public class StudioController {
         studio.snapshot(userId, id, payload);
     }
 }
+

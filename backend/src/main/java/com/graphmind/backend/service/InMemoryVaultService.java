@@ -1,6 +1,7 @@
 package com.graphmind.backend.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+//import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.graphmind.backend.domain.LinkRef;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
@@ -10,6 +11,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.Collections;
+import com.graphmind.backend.domain.LinkRef; // LinkRef 寃쎈줈???꾨줈?앺듃??留욊쾶
 
 @Service
 public class InMemoryVaultService implements VaultService {
@@ -56,7 +59,7 @@ public class InMemoryVaultService implements VaultService {
                 now
         );
 
-        // array3d면 dims 자동 추론(있으면 우선 사용)
+        // array3d硫?dims ?먮룞 異붾줎(?덉쑝硫??곗꽑 ?ъ슜)
         item = maybeInferArrayDims(item);
 
         store.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(id, item);
@@ -99,7 +102,7 @@ public class InMemoryVaultService implements VaultService {
         String nextTitle = patch.title() != null ? patch.title().trim() : prev.title();
         List<String> nextTags = patch.tags() != null ? normTags(patch.tags()) : prev.tags();
 
-        // equation일 때만 formula 수정 허용 (그 외 타입은 무시)
+        // equation???뚮쭔 formula ?섏젙 ?덉슜 (洹?????낆? 臾댁떆)
         String nextFormula = prev.formula();
         if ("equation".equals(prev.type()) && patch.formula() != null) {
             String f = patch.formula().trim();
@@ -129,12 +132,18 @@ public class InMemoryVaultService implements VaultService {
     }
 
     // =========================
-    // ✅ NEW: content만 부분 업데이트
+    // ??NEW: content留?遺遺??낅뜲?댄듃
     // =========================
     @Override
     public VaultItem patchContent(String userId, String id, JsonNode content) {
-        VaultItem prev = getOwned(userId, id);
+        VaultItem prev = getOwned(userId, id); // ?놁쑝硫?NoSuchElementException ??ApiExceptionHandler媛 404濡?蹂??
+
         Instant now = Instant.now();
+
+        JsonNode nextContent = (content != null) ? content : prev.content();
+        List<String> nextTags = (prev.tags() != null) ? prev.tags() : List.of();
+        List<LinkRef> nextLinks = (prev.links() != null) ? prev.links() : Collections.emptyList();
+
 
         VaultItem next = new VaultItem(
                 prev.id(),
@@ -148,9 +157,9 @@ public class InMemoryVaultService implements VaultService {
                 prev.sizeX(),
                 prev.sizeY(),
                 prev.sizeZ(),
-                prev.tags(),
-                content,
-                prev.links(),
+                nextTags,
+                nextContent,
+                nextLinks,
                 now
         );
 
@@ -159,15 +168,16 @@ public class InMemoryVaultService implements VaultService {
         return next;
     }
 
+
     // =========================
-    // ✅ NEW: item 전체(부분) 업데이트
+    // ??NEW: item ?꾩껜(遺遺? ?낅뜲?댄듃
     // =========================
     @Override
     public VaultItem patchItem(String userId, String id, VaultItemPatch patch) {
         VaultItem prev = getOwned(userId, id);
         Instant now = Instant.now();
 
-        // type이 바뀌면 그 type 기준으로 제약(예: formula 허용 여부)을 결정
+        // type??諛붾뚮㈃ 洹?type 湲곗??쇰줈 ?쒖빟(?? formula ?덉슜 ?щ?)??寃곗젙
         String nextType = prev.type();
         if (patch.type() != null && !patch.type().isBlank()) {
             nextType = patch.type().trim();
@@ -193,7 +203,7 @@ public class InMemoryVaultService implements VaultService {
         String nextExpr = patch.expr() != null ? patch.expr() : prev.expr();
         Integer nextSamples = patch.samples() != null ? patch.samples() : prev.samples();
 
-        // formula는 equation 타입일 때만 의미 있게 반영 (기존 정책 유지)
+        // formula??equation ??낆씪 ?뚮쭔 ?섎? ?덇쾶 諛섏쁺 (湲곗〈 ?뺤콉 ?좎?)
         String nextFormula = prev.formula();
         if (patch.formula() != null && "equation".equals(nextType)) {
             String f = patch.formula().trim();
@@ -314,7 +324,7 @@ public class InMemoryVaultService implements VaultService {
         JsonNode c = item.content();
         if (c == null || !c.isArray() || c.size() == 0) return item;
 
-        // 기본 가정: content[z][y][x]
+        // 湲곕낯 媛?? content[z][y][x]
         int z = c.size();
         int y = c.get(0).isArray() ? c.get(0).size() : 0;
         int x = (y > 0 && c.get(0).get(0).isArray()) ? c.get(0).get(0).size() : 0;
@@ -330,3 +340,4 @@ public class InMemoryVaultService implements VaultService {
         );
     }
 }
+

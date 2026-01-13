@@ -1,6 +1,7 @@
 package com.graphmind.backend.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+
 import com.graphmind.backend.repo.TokenStore;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

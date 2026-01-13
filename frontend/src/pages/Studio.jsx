@@ -118,13 +118,46 @@ const isCurve3DCommitPatch = (patch) => {
     "zExpr" in patch ||
     "baseXExpr" in patch ||
     "baseYExpr" in patch ||
-    "baseZExpr" in patch
+    "baseZExpr" in patch ||
+    // ✅ 툴바가 x/y/z로 보낼 가능성까지 커버
+    "x" in patch ||
+    "y" in patch ||
+    "z" in patch
   );
 };
 
 const isSurface3DCommitPatch = (patch) => {
   if (!patch || typeof patch !== "object") return false;
-  return "expr" in patch;
+  return (
+    "expr" in patch ||
+    // ✅ 툴바/기존 데이터가 zExpr/formula로 올 수도 있음
+    "zExpr" in patch ||
+    "formula" in patch
+  );
+};
+
+const normalizeCurve3DPatch = (patch) => {
+  if (!patch || typeof patch !== "object") return patch;
+  const p = { ...patch };
+
+  // x/y/z → xExpr/yExpr/zExpr로 정규화
+  if ("x" in p && !("xExpr" in p)) p.xExpr = p.x;
+  if ("y" in p && !("yExpr" in p)) p.yExpr = p.y;
+  if ("z" in p && !("zExpr" in p)) p.zExpr = p.z;
+
+  // baseX/baseY/baseZ 같은 케이스가 있으면 필요 시 추가 가능
+  return p;
+};
+
+const normalizeSurface3DPatch = (patch) => {
+  if (!patch || typeof patch !== "object") return patch;
+  const p = { ...patch };
+
+  // zExpr/formula → expr로 정규화
+  if ("zExpr" in p && !("expr" in p)) p.expr = p.zExpr;
+  if ("formula" in p && !("expr" in p)) p.expr = p.formula;
+
+  return p;
 };
 
 function fitPolyCoeffs(xs, ys, degree) {
@@ -767,6 +800,53 @@ export default function Studio() {
   const [vaultResources, setVaultResources] = useState([]);
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultError, setVaultError] = useState("");
+const sanitizeCurve3DForPersist = (c) => {
+  const src = c || {};
+  // ❌ 대용량/렌더링 캐시로 추정되는 필드들은 제거
+  const {
+    geometry,
+    mesh,
+    vertices,
+    indices,
+    normals,
+    positions,
+    points,
+    samples,     // 배열일 가능성
+    cached,
+    cache,
+    buffers,
+    ...rest
+  } = src;
+
+  return {
+    ...rest,
+    markers: cloneMarkers(src?.markers),
+  };
+};
+
+const sanitizeSurface3DForPersist = (s) => {
+  const src = s || {};
+  const {
+    geometry,
+    mesh,
+    vertices,
+    indices,
+    normals,
+    positions,
+    points,
+    samples,
+    grid,
+    cached,
+    cache,
+    buffers,
+    ...rest
+  } = src;
+
+  return {
+    ...rest,
+    markers: cloneMarkers(src?.markers),
+  };
+};
 
   const refreshVaultResources = useCallback(async () => {
     setVaultLoading(true);
@@ -1164,49 +1244,73 @@ export default function Studio() {
     [vaultRequest]
   );
 
+  // ✅ /content PATCH 호환 래퍼
+  // - apiClient.request / vaultRequest가 JSON.stringify를 담당하므로, 여기서 stringify 금지
+  // - api.patchVaultContent는 "raw content"를 넘기면 내부에서 {content: ...}로 래핑하도록 통일
   const patchVaultContentCompat = useCallback(
-    (vaultId, content) =>
-      api.patchVaultContent
-        ? api.patchVaultContent(vaultId, content)
-        : vaultRequest(`/api/v1/vault/items/${vaultId}/content`, {
-            method: "PATCH",
-            body: content,
-          }),
-    [vaultRequest]
+    async (itemId, content) => {
+      if (!itemId) return;
+
+      if (api?.patchVaultContent) {
+        // ✅ raw content만 전달 (이중 {content:{content:...}} 방지)
+        return api.patchVaultContent(itemId, content);
+      }
+
+      // ✅ fallback: 서버는 body에 content 키가 있으면 그 값을 content로 사용
+      return vaultRequest(`/api/v1/vault/items/${itemId}/content`, {
+        method: "PATCH",
+        body: { content },
+      });
+    },
+    [api, vaultRequest]
   );
 
   const lastEqSaveSigRef = useRef({});
 
-  const patchVaultLocal = useCallback((vaultId, patch) => {
-    if (!vaultId || !patch || typeof patch !== "object") return;
+ const patchVaultLocal = useCallback((vaultId, patch) => {
+  if (!vaultId || !patch || typeof patch !== "object") return;
 
-    // undefined 값은 덮어쓰지 않도록 정리
-    const clean = Object.fromEntries(
-      Object.entries(patch).filter(([, v]) => v !== undefined)
-    );
+  const clean = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined)
+  );
 
-    setVaultResources((prev) => {
-      const idx = prev.findIndex((n) => n.id === vaultId);
-      if (idx === -1) return prev;
+  setVaultResources((prev) => {
+    const idx = prev.findIndex((n) => n.id === vaultId);
 
-      const updated = {
-        ...prev[idx],
+    // ✅ 없으면 새로 생성해서 맨 앞에 삽입
+    if (idx === -1) {
+      const created = {
+        id: vaultId,
+        title: clean.title ?? "(untitled)",
+        type: clean.type ?? "unknown",
+        tags: clean.tags ?? [],
         ...clean,
         updatedAt: new Date().toISOString(),
       };
-
-      const next = [...prev];
-      next[idx] = updated;
-
+      const next = [created, ...prev];
       try {
         localStorage.setItem(VAULT_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.error("Failed to update vaultResources cache:", e);
-      }
-
+      } catch {}
       return next;
-    });
-  }, []);
+    }
+
+    const updated = {
+      ...prev[idx],
+      ...clean,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const next = [...prev];
+    next[idx] = updated;
+
+    try {
+      localStorage.setItem(VAULT_KEY, JSON.stringify(next));
+    } catch {}
+
+    return next;
+  });
+}, []);
+
 
   const persistVaultMeta = useCallback(async (vaultId, meta) => {
     if (!vaultId) return;
@@ -1282,6 +1386,7 @@ export default function Studio() {
     };
   }, []);
 
+  // ✅ equation은 meta(formula)로만 저장한다. (/content는 호출하지 않음)
   const persistEquation = useCallback(
     (vaultId, payload) => {
       if (!vaultId) return;
@@ -1308,150 +1413,196 @@ export default function Studio() {
       lastEqSaveSigRef.current[vaultId] = sig;
 
       // UI는 즉시 갱신 (optimistic)
+      // - equation의 그래프/포인트는 로컬 상태(content)에 유지하되,
+      //   서버에는 formula(meta)만 저장한다.
       patchVaultLocal(vaultId, { formula: equation, content });
 
       // 네트워크 저장은 비동기
       void (async () => {
         try {
           await persistVaultMeta(vaultId, { formula: equation });
-          await persistVaultContent(vaultId, content);
+          // ✅ equation은 /content 저장하지 않음
         } catch (err) {
-          // 이미 콘솔 로깅/UNAUTHORIZED 처리는 내부에서 수행
+          // persistVaultMeta 내부에서 로깅/UNAUTHORIZED 처리
         }
       })();
     },
-    [
-      buildEquationContent,
-      patchVaultLocal,
-      persistVaultContent,
-      persistVaultMeta,
-    ]
+    [buildEquationContent, patchVaultLocal, persistVaultMeta]
   );
 
-  const persistCurve3D = useCallback(
+const persistCurve3D = useCallback(
   (vaultId, curve3d) => {
     if (!vaultId) return;
 
-    // ✅ content는 curve3d 객체 자체여야 createTab()이 정상 로딩합니다.
-    const content = cloneCurve3D(curve3d);
+    const traceId = `curve3d:${vaultId}:${Date.now()}`;
+    const content = sanitizeCurve3DForPersist(curve3d);
 
-    // ✅ 로컬 캐시(목록/프리뷰) 먼저 갱신
-    patchVaultLocal(vaultId, { content, samples: content?.samples });
+    // ✅ LeftPanel이 보는 top-level(x/y/z, tRange, samples 등)도 같이 갱신
+    const localPatch = {
+      type: "curve3d",
+      content,
+      samples: content?.samples,
+      // 표시/검색/미니프리뷰용
+      xExpr: content?.xExpr ?? content?.x,
+      yExpr: content?.yExpr ?? content?.y,
+      zExpr: content?.zExpr ?? content?.z,
+      x: content?.xExpr ?? content?.x,
+      y: content?.yExpr ?? content?.y,
+      z: content?.zExpr ?? content?.z,
+      tMin: content?.tMin ?? (Array.isArray(content?.tRange) ? content.tRange[0] : undefined),
+      tMax: content?.tMax ?? (Array.isArray(content?.tRange) ? content.tRange[1] : undefined),
+      tRange:
+        Array.isArray(content?.tRange) ? content.tRange :
+        (Number.isFinite(content?.tMin) && Number.isFinite(content?.tMax) ? [content.tMin, content.tMax] : undefined),
+      editMode: content?.editMode,
+      degree: content?.degree,
+    };
 
-    // ✅ 백엔드 저장: /content 선호 (없으면 내부에서 /items로 fallback)
+    patchVaultLocal(vaultId, localPatch);
+
     void (async () => {
       try {
+        console.info("[studio] persistCurve3D -> /content", {
+          traceId,
+          vaultId,
+          contentKeys: Object.keys(content || {}),
+          contentPreview: JSON.stringify(content)?.slice(0, 400),
+        });
+
         await persistVaultContent(vaultId, content);
+
+        // ✅ 서버 리스트를 다시 받아서(정렬/updatedAt 포함) 동기화
+        await refreshVaultResources();
+
+        // ✅ 서버가 top-level(x/y/z/expr)을 별도로 저장하지 않는 구조에서도
+        // LeftPanel 표시가 유지되도록 다시 한 번 로컬 패치
+        patchVaultLocal(vaultId, localPatch);
       } catch (err) {
-        // persistVaultContent 내부에서 UNAUTHORIZED/로그 처리
+        console.error("[studio] persistCurve3D failed", { traceId, vaultId, err });
       }
     })();
   },
-  [patchVaultLocal, persistVaultContent]
+  [patchVaultLocal, persistVaultContent, refreshVaultResources]
 );
+
 
 const persistSurface3D = useCallback(
   (vaultId, surface3d) => {
     if (!vaultId) return;
 
-    // ✅ content는 surface3d 객체 자체여야 createTab()이 정상 로딩합니다.
-    const content = cloneSurface3D(surface3d);
+    const traceId = `surface3d:${vaultId}:${Date.now()}`;
+    const content = sanitizeSurface3DForPersist(surface3d);
 
-    // ✅ 로컬 캐시(목록/프리뷰) 먼저 갱신
-    patchVaultLocal(vaultId, {
+    // ✅ LeftPanel이 보는 top-level(expr/xMin/xMax/yMin/yMax 등)도 같이 갱신
+    const localPatch = {
+      type: "surface3d",
       content,
-      expr: content?.expr,
-      samples: content?.nx ?? content?.samples,
-    });
+      // 표시/검색/미니프리뷰용
+      expr: content?.expr ?? content?.zExpr ?? content?.formula,
+      zExpr: content?.zExpr ?? content?.expr ?? content?.formula,
+      formula: content?.formula ?? content?.expr ?? content?.zExpr,
+      xMin: content?.xMin,
+      xMax: content?.xMax,
+      yMin: content?.yMin,
+      yMax: content?.yMax,
+      xRange:
+        Array.isArray(content?.xRange) ? content.xRange :
+        (Number.isFinite(content?.xMin) && Number.isFinite(content?.xMax) ? [content.xMin, content.xMax] : undefined),
+      yRange:
+        Array.isArray(content?.yRange) ? content.yRange :
+        (Number.isFinite(content?.yMin) && Number.isFinite(content?.yMax) ? [content.yMin, content.yMax] : undefined),
+      nx: content?.nx,
+      ny: content?.ny,
+      gridMode: content?.gridMode,
+      gridStep: content?.gridStep,
+      minorDiv: content?.minorDiv,
+      markers: content?.markers,
+      editMode: content?.editMode,
+      degree: content?.degree,
+    };
 
-    // ✅ 백엔드 저장: /content 선호 (없으면 내부에서 /items로 fallback)
+    patchVaultLocal(vaultId, localPatch);
+
     void (async () => {
       try {
+        console.info("[studio] persistSurface3D -> /content", {
+          traceId,
+          vaultId,
+          contentKeys: Object.keys(content || {}),
+          contentPreview: JSON.stringify(content)?.slice(0, 400),
+        });
+
         await persistVaultContent(vaultId, content);
+
+        // ✅ 서버 리스트 동기화
+        await refreshVaultResources();
+
+        // ✅ 표시 유지용 재패치
+        patchVaultLocal(vaultId, localPatch);
       } catch (err) {
-        // persistVaultContent 내부에서 UNAUTHORIZED/로그 처리
+        console.error("[studio] persistSurface3D failed", { traceId, vaultId, err });
       }
     })();
   },
-  [patchVaultLocal, persistVaultContent]
+  [patchVaultLocal, persistVaultContent, refreshVaultResources]
 );
+
+
+
 
   // ✅ 새로고침/탭닫기 대비: keepalive 저장(요청이 끊기지 않도록)
   const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080";
 
   const flushActiveTabSave = useCallback(() => {
-  const fp = focusedPaneRef.current || "left";
-  const activeId = panesRef.current?.[fp]?.activeId;
-  if (!activeId) return;
+    const fp = focusedPaneRef.current || "left";
+    const activeId = panesRef.current?.[fp]?.activeId;
+    if (!activeId) return;
 
-  const s = tabStateRef.current?.[activeId];
-  if (!s?.vaultId) return;
+    const s = tabStateRef.current?.[activeId];
+    if (!s?.vaultId) return;
 
-  const token = localStorage.getItem("gm_token") || "";
-  const headers = {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+    // ✅ /items PATCH는 서버 스펙 차이로 500이 날 수 있어 /content 저장으로 통일
+    let content = null;
 
-  const tryKeepalivePatch = (url, body) => {
+    if (s.type === "equation") {
+      content = buildEquationContent({
+        points: s.points,
+        xmin: s.xmin,
+        xmax: s.xmax,
+        gridStep: s.gridStep,
+        gridMode: s.gridMode,
+        minorDiv: s.minorDiv,
+        viewMode: s.viewMode,
+        editMode: s.editMode,
+        ruleMode: s.ruleMode,
+        rulePolyDegree: s.rulePolyDegree,
+        degree: s.degree,
+      });
+    } else if (s.type === "curve3d") {
+      content = cloneCurve3D(s.curve3d);
+    } else if (s.type === "surface3d") {
+      content = cloneSurface3D(s.surface3d);
+    } else {
+      return;
+    }
+
+    const token = localStorage.getItem("gm_token") || "";
+
+    // keepalive: 페이지 언로드 중에도 전송 시도(베스트 에포트)
     try {
-      fetch(url, {
+      fetch(`${API_BASE}/api/v1/vault/items/${s.vaultId}/content`, {
         method: "PATCH",
         keepalive: true,
-        headers,
-        body: JSON.stringify(body),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ content }),
       });
-    } catch {
+    } catch (e) {
       // ignore
     }
-  };
-
-  if (s.type === "equation") {
-    const equation = normalizeFormula(s.equation);
-    const content = buildEquationContent({
-      points: s.points,
-      xmin: s.xmin,
-      xmax: s.xmax,
-      gridStep: s.gridStep,
-      gridMode: s.gridMode,
-      minorDiv: s.minorDiv,
-      viewMode: s.viewMode,
-      editMode: s.editMode,
-      ruleMode: s.ruleMode,
-      rulePolyDegree: s.rulePolyDegree,
-      degree: s.degree,
-    });
-
-    // ✅ 평소 저장 방식(/content + /meta)에 맞춰 keepalive도 동일하게 전송
-    tryKeepalivePatch(
-      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
-      { content }
-    );
-    tryKeepalivePatch(
-      `${API_BASE}/api/v1/vault/items/${s.vaultId}/meta`,
-      { formula: equation }
-    );
-    return;
-  }
-
-  if (s.type === "curve3d") {
-    const content = cloneCurve3D(s.curve3d);
-    tryKeepalivePatch(
-      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
-      { content }
-    );
-    return;
-  }
-
-  if (s.type === "surface3d") {
-    const content = cloneSurface3D(s.surface3d);
-    tryKeepalivePatch(
-      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
-      { content }
-    );
-    return;
-  }
-}, [buildEquationContent]);
+  }, [buildEquationContent]);
 
   useEffect(() => {
     const onPageHide = () => flushActiveTabSave();
@@ -3310,9 +3461,17 @@ const persistSurface3D = useCallback(
   const updateCurve3D = useCallback(
     (tabId, patch) => {
       if (!tabId) return;
-
+      const normalizedPatch = normalizeCurve3DPatch(patch);
       const commitLike = isCurve3DCommitPatch(patch);
-
+      console.info("[studio] curve3d patch", {
+        tabId,
+        commitLike,
+        keys:
+          normalizedPatch && typeof normalizedPatch === "object"
+            ? Object.keys(normalizedPatch)
+            : typeof normalizedPatch,
+        vaultId: tabStateRef.current?.[tabId]?.vaultId ?? null,
+      });
       // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
       if (
         patch &&
@@ -3333,14 +3492,13 @@ const persistSurface3D = useCallback(
           [tabId]: { ...cur, curve3d: nextCurve3d, ver: (cur.ver ?? 0) + 1 },
         };
 
-                const vaultId = cur.vaultId ?? null;
-
         const txn = dragTxnRef.current;
-        const txnMatches =
-          commitLike && txn && txn.tabId === tabId && txn.kind === "curve3d";
-
-        if (txnMatches) {
-
+        if (
+          commitLike &&
+          txn &&
+          txn.tabId === tabId &&
+          txn.kind === "curve3d"
+        ) {
           const before = txn.before;
           const after = { curve3d: cloneCurve3D(nextCurve3d) };
 
@@ -3359,9 +3517,6 @@ const persistSurface3D = useCallback(
           if (txn.vaultId) persistCurve3D(txn.vaultId, nextCurve3d);
 
           dragTxnRef.current = null;
-        } else if (commitLike && vaultId) {
-          // ✅ txn이 없거나 매칭이 안 되는 케이스(예: Apply 단독 변경)도 저장 보장
-          persistCurve3D(vaultId, nextCurve3d);
         }
 
         return next;
@@ -3374,9 +3529,17 @@ const persistSurface3D = useCallback(
   const updateSurface3D = useCallback(
     (tabId, patch) => {
       if (!tabId) return;
-
+      const normalizedPatch = normalizeSurface3DPatch(patch);
       const commitLike = isSurface3DCommitPatch(patch);
-
+      console.info("[studio] surface3d patch", {
+        tabId,
+        commitLike,
+        keys:
+          normalizedPatch && typeof normalizedPatch === "object"
+            ? Object.keys(normalizedPatch)
+            : typeof normalizedPatch,
+        vaultId: tabStateRef.current?.[tabId]?.vaultId ?? null,
+      });
       // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
       if (
         patch &&
@@ -3401,14 +3564,13 @@ const persistSurface3D = useCallback(
           },
         };
 
-                const vaultId = cur.vaultId ?? null;
-
         const txn = dragTxnRef.current;
-        const txnMatches =
-          commitLike && txn && txn.tabId === tabId && txn.kind === "surface3d";
-
-        if (txnMatches) {
-
+        if (
+          commitLike &&
+          txn &&
+          txn.tabId === tabId &&
+          txn.kind === "surface3d"
+        ) {
           const before = txn.before;
           const after = { surface3d: cloneSurface3D(nextSurface3d) };
 
@@ -3427,9 +3589,6 @@ const persistSurface3D = useCallback(
           if (txn.vaultId) persistSurface3D(txn.vaultId, nextSurface3d);
 
           dragTxnRef.current = null;
-        } else if (commitLike && vaultId) {
-          // ✅ txn이 없거나 매칭이 안 되는 케이스(예: Apply 단독 변경)도 저장 보장
-          persistSurface3D(vaultId, nextSurface3d);
         }
 
         return next;
@@ -3619,11 +3778,20 @@ const persistSurface3D = useCallback(
             setFocusedPane("left");
           }}
           onOpenArray={(res) => {
-            const vid = res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
-            return createTab(null, "left", "array3d", res.content, res.title, vid);
+            const vid =
+              res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
+            return createTab(
+              null,
+              "left",
+              "array3d",
+              res.content,
+              res.title,
+              vid
+            );
           }}
           onOpenResource={(res) => {
-            const vid = res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
+            const vid =
+              res?.id ?? res?.vaultId ?? res?.itemId ?? res?.key ?? null;
             if (vid != null) {
               const paneKeys = ["left", "right"];
               for (const paneKey of paneKeys) {
@@ -3640,36 +3808,14 @@ const persistSurface3D = useCallback(
             }
 
             if (res.type === "curve3d") {
-              const payload = res?.content ?? res?.curve3d ?? res;
-              createTab(payload, "left", "curve3d", payload, res.title, vid);
+              createTab(res, "left", "curve3d", res, res.title, vid);
             } else if (res.type === "equation") {
-              createTab(
-                res.formula,
-                "left",
-                "equation",
-                null,
-                res.title,
-                vid
-              );
+              createTab(res.formula, "left", "equation", null, res.title, vid);
             } else if (res.type === "array3d") {
-              createTab(
-                null,
-                "left",
-                "array3d",
-                res.content,
-                res.title,
-                vid
-              );
+              createTab(null, "left", "array3d", res.content, res.title, vid);
             } else if (res.type === "surface3d") {
-              const payload = res?.content ?? res?.surface3d ?? res;
-              createTab(
-                payload,
-                "left",
-                "surface3d",
-                payload,
-                res.title,
-                vid
-              );
+              const payload = res.surface3d || res;
+              createTab(payload, "left", "surface3d", payload, res.title, vid);
             }
           }}
         />
@@ -3730,6 +3876,7 @@ const persistSurface3D = useCallback(
           <Curve3DToolbar
             curve3d={active.curve3d}
             onChange={(patch) => updateCurve3D(activeId, patch)}
+            onApply={(patch) => updateCurve3D(activeId, patch)}
             showLeftPanel={showLeftPanel}
             onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}
             // ✅ 추가
@@ -3741,6 +3888,7 @@ const persistSurface3D = useCallback(
           <Surface3DToolbar
             surface3d={active.surface3d}
             onChange={(patch) => updateSurface3D(activeId, patch)}
+            onApply={(patch) => updateSurface3D(activeId, patch)}
             // ✅ 추가: 좌패널 토글 + 컨텍스트/undo/redo
             showLeftPanel={showLeftPanel}
             onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}

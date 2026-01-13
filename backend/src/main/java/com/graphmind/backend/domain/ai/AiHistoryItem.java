@@ -1,13 +1,13 @@
 package com.graphmind.backend.domain.ai;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.time.Instant;
 
 public class AiHistoryItem {
     private String id;
     private Instant ts;
 
-    // ✅ 로그인 사용자 스코프 분리
+    // ??濡쒓렇???ъ슜???ㅼ퐫??遺꾨━
     private String userId;
 
     private String tabId;
@@ -52,3 +52,4 @@ public class AiHistoryItem {
     public JsonNode getParsed() { return parsed; }
     public void setParsed(JsonNode parsed) { this.parsed = parsed; }
 }
+

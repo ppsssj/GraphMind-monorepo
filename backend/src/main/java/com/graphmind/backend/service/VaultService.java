@@ -1,6 +1,6 @@
 package com.graphmind.backend.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.graphmind.backend.domain.LinkRef;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
@@ -8,23 +8,23 @@ import com.graphmind.backend.domain.VaultItemSummary;
 import java.util.List;
 
 /**
- * Vault 비즈니스 로직 인터페이스.
+ * Vault 鍮꾩쫰?덉뒪 濡쒖쭅 ?명꽣?섏씠??
  *
- * ✅ 추가:
- * - patchContent: 타입별 payload(content)만 부분 업데이트
- * - patchItem: curve3d/surface3d/array3d 등 타입별 메타+payload를 부분 업데이트
+ * ??異붽?:
+ * - patchContent: ??낅퀎 payload(content)留?遺遺??낅뜲?댄듃
+ * - patchItem: curve3d/surface3d/array3d ????낅퀎 硫뷀?+payload瑜?遺遺??낅뜲?댄듃
  *
- * 프론트에서 PATCH를 보내는데 405/404가 뜨는 문제를 해결하려면
- * Controller + Service + Implementation(InMemoryVaultService 등)에 이 메서드들이 구현되어야 합니다.
+ * ?꾨줎?몄뿉??PATCH瑜?蹂대궡?붾뜲 405/404媛 ?⑤뒗 臾몄젣瑜??닿껐?섎젮硫?
+ * Controller + Service + Implementation(InMemoryVaultService ??????硫붿꽌?쒕뱾??援ы쁽?섏뼱???⑸땲??
  */
 public interface VaultService {
 
     /**
-     * 생성/전체 갱신(Upsert) 바디.
-     * - equation: formula 사용
-     * - surface3d: expr 사용
-     * - curve3d: samples 사용(세부 x/y/z 등은 content에 저장)
-     * - array3d: axisOrder + sizeX/Y/Z 사용(실데이터는 content에 저장)
+     * ?앹꽦/?꾩껜 媛깆떊(Upsert) 諛붾뵒.
+     * - equation: formula ?ъ슜
+     * - surface3d: expr ?ъ슜
+     * - curve3d: samples ?ъ슜(?몃? x/y/z ?깆? content?????
+     * - array3d: axisOrder + sizeX/Y/Z ?ъ슜(?ㅻ뜲?댄꽣??content?????
      */
     record VaultUpsert(
             String title,
@@ -42,8 +42,8 @@ public interface VaultService {
     ) {}
 
     /**
-     * “제목/태그(+equation formula)”만 수정하는 편집 기능용.
-     * (기존 프론트 patchVaultMeta 호환)
+     * ?쒖젣紐??쒓렇(+equation formula)?앸쭔 ?섏젙?섎뒗 ?몄쭛 湲곕뒫??
+     * (湲곗〈 ?꾨줎??patchVaultMeta ?명솚)
      */
     record VaultMetaPatch(
             String title,
@@ -52,8 +52,8 @@ public interface VaultService {
     ) {}
 
     /**
-     * 부분 업데이트용(선택 필드만 채워서 PATCH).
-     * - curve3d / surface3d / array3d 등에서도 동일하게 사용
+     * 遺遺??낅뜲?댄듃???좏깮 ?꾨뱶留?梨꾩썙??PATCH).
+     * - curve3d / surface3d / array3d ?깆뿉?쒕룄 ?숈씪?섍쾶 ?ъ슜
      */
     record VaultItemPatch(
             String title,
@@ -78,12 +78,13 @@ public interface VaultService {
 
     VaultItem patchMeta(String userId, String id, VaultMetaPatch patch);
 
-    // ✅ NEW: /items/{id}/content PATCH 대응
+    // ??NEW: /items/{id}/content PATCH ???
     VaultItem patchContent(String userId, String id, JsonNode content);
 
-    // ✅ NEW: /items/{id} PATCH 대응(곡면/곡선/배열 포함)
+    // ??NEW: /items/{id} PATCH ???怨〓㈃/怨≪꽑/諛곗뿴 ?ы븿)
     VaultItem patchItem(String userId, String id, VaultItemPatch patch);
 
     VaultItem getOwned(String userId, String id);
     void delete(String userId, String id);
 }
+

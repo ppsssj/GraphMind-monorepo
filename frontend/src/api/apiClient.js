@@ -1,4 +1,6 @@
+// src/api/apiClient.js
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080";
+const API_DEBUG = String(process.env.REACT_APP_API_DEBUG || "").toLowerCase() === "1";
 
 export function getToken() {
   return localStorage.getItem("gm_token") || "";
@@ -9,8 +11,39 @@ export function setToken(token) {
   else localStorage.setItem("gm_token", token);
 }
 
+function safePreview(obj, max = 800) {
+  try {
+    const s = typeof obj === "string" ? obj : JSON.stringify(obj);
+    return s.length > max ? s.slice(0, max) + "…(truncated)" : s;
+  } catch {
+    return String(obj);
+  }
+}
+
+function logReq(phase, info) {
+  if (!API_DEBUG) return;
+  const { method, path, status, ms, bodyPreview, err } = info || {};
+  if (phase === "request") {
+    // eslint-disable-next-line no-console
+    console.info("[api] ->", method, path, bodyPreview ? { body: bodyPreview } : "");
+  } else if (phase === "response") {
+    // eslint-disable-next-line no-console
+    console.info("[api] <-", method, path, status, ms != null ? `${ms}ms` : "");
+  } else if (phase === "error") {
+    // eslint-disable-next-line no-console
+    console.error("[api] !!", method, path, status, ms != null ? `${ms}ms` : "", err);
+  }
+}
+
 async function requestOnce(path, { method = "GET", body, headers = {} } = {}) {
   const token = getToken();
+  const t0 = performance?.now ? performance.now() : Date.now();
+
+  logReq("request", {
+    method,
+    path,
+    bodyPreview: body !== undefined ? safePreview(body) : null,
+  });
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,
@@ -19,7 +52,7 @@ async function requestOnce(path, { method = "GET", body, headers = {} } = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   const text = await res.text();
@@ -30,15 +63,21 @@ async function requestOnce(path, { method = "GET", body, headers = {} } = {}) {
     data = text || null;
   }
 
+  const t1 = performance?.now ? performance.now() : Date.now();
+  const ms = Math.round(t1 - t0);
+
   if (!res.ok) {
     const err = new Error("API_ERROR");
     err.status = res.status;
     err.data = data;
     err.method = method;
     err.path = path;
+
+    logReq("error", { method, path, status: res.status, ms, err: { data } });
     throw err;
   }
 
+  logReq("response", { method, path, status: res.status, ms });
   return data;
 }
 
@@ -48,6 +87,13 @@ async function request(path, opts = {}) {
     return await requestOnce(path, opts);
   } catch (err) {
     const method = String(opts?.method || "GET").toUpperCase();
+
+    // ✅ 재시도 자체도 로그로 남김
+    if (API_DEBUG) {
+      // eslint-disable-next-line no-console
+      console.warn("[api] retry check", { method, path, status: err?.status });
+    }
+
     if (Number(err?.status) === 405) {
       if (method === "PATCH") {
         try {
@@ -66,6 +112,7 @@ async function request(path, opts = {}) {
           throw err2;
         }
       }
+
       if (method === "PUT") {
         return await requestOnce(path, {
           ...opts,
@@ -77,6 +124,7 @@ async function request(path, opts = {}) {
         });
       }
     }
+
     throw err;
   }
 }
@@ -117,7 +165,7 @@ export const api = {
       method: "PATCH",
       body: { title, tags, formula },
     }),
-  // apiClient.js
+
   updateVaultItem: (id, payload) =>
     request(`/api/v1/vault/items/${id}`, { method: "PUT", body: payload }),
 
@@ -125,6 +173,7 @@ export const api = {
   patchVaultItem: (id, payload) =>
     request(`/api/v1/vault/items/${id}`, { method: "PATCH", body: payload }),
 
+  // ✅ raw content를 받아서 { content }로 래핑
   patchVaultContent: (id, content) =>
     request(`/api/v1/vault/items/${id}/content`, {
       method: "PATCH",

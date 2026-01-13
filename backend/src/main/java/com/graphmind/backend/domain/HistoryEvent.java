@@ -1,6 +1,6 @@
 package com.graphmind.backend.domain;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.time.Instant;
 
 public record HistoryEvent(
@@ -12,3 +12,4 @@ public record HistoryEvent(
         JsonNode payload,
         Instant createdAt
 ) {}
+

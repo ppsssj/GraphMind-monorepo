@@ -1,8 +1,10 @@
 package com.graphmind.backend.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
+
 import com.graphmind.backend.domain.StudioProject;
 import com.graphmind.backend.repo.InMemoryStore;
 import org.springframework.stereotype.Service;
@@ -71,7 +73,7 @@ public class StudioService {
         history.append(userId, "STUDIO", p.id(), "SNAPSHOT", payload);
     }
 
-    private ObjectNode toPayload(StudioProject p) {
+    private JsonNode  toPayload(StudioProject p) {
         ObjectNode n = om.createObjectNode();
         n.put("id", p.id());
         n.put("title", p.title());
@@ -80,3 +82,4 @@ public class StudioService {
         return n;
     }
 }
+

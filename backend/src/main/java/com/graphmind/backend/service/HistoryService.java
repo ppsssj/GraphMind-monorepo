@@ -1,6 +1,6 @@
 package com.graphmind.backend.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.graphmind.backend.domain.HistoryEvent;
 import com.graphmind.backend.repo.InMemoryStore;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class HistoryService {
                 payload,
                 Instant.now()
         );
-        store.history.addFirst(ev); // 최신이 앞
+        store.history.addFirst(ev); // 理쒖떊????
         return ev;
     }
 
@@ -42,3 +42,4 @@ public class HistoryService {
                 .collect(Collectors.toList());
     }
 }
+

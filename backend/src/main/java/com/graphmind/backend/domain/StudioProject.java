@@ -1,6 +1,6 @@
 package com.graphmind.backend.domain;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.time.Instant;
 
 public record StudioProject(
@@ -11,3 +11,4 @@ public record StudioProject(
         JsonNode payload,
         Instant updatedAt
 ) {}
+

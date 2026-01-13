@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import "./Toolbar.css";
 import "./Curve3DToolbar.css";
 
-export default function Curve3DToolbar({ curve3d, onChange }) {
+export default function Curve3DToolbar({ curve3d, onChange, onApply }) {
   const c = curve3d || {};
 
   const [x, setX] = useState(c.xExpr ?? "");
@@ -75,7 +75,7 @@ export default function Curve3DToolbar({ curve3d, onChange }) {
     const nextSigma = Math.max(1e-6, Number(deformSigma) || 0.6);
     const nextMaxDelta = Math.max(0, Number(maxDelta) || 0);
 
-    onChange?.({
+    const patch = {
       baseXExpr: x,
       baseYExpr: y,
       baseZExpr: z,
@@ -99,7 +99,9 @@ export default function Curve3DToolbar({ curve3d, onChange }) {
         { id: 1, t: (nextTMin + nextTMax) / 2 },
         { id: 2, t: nextTMax },
       ],
-    });
+    };
+
+    (onApply || onChange)?.(patch);
   };
 
   const resetEditToBase = () => {

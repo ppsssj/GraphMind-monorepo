@@ -9,7 +9,7 @@ function clampInt(v, lo, hi, fallback) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-export default function Surface3DToolbar({ surface3d, onChange, onFit, onClearMarkers }) {
+export default function Surface3DToolbar({ surface3d, onChange, onApply, onFit, onClearMarkers }) {
   const s = surface3d || {};
 
   const [expr, setExpr] = useState(s.expr ?? "sin(x) * cos(y)");
@@ -105,7 +105,7 @@ export default function Surface3DToolbar({ surface3d, onChange, onFit, onClearMa
     };
 
     if (![next.xMin, next.xMax, next.yMin, next.yMax].every((v) => Number.isFinite(v))) return;
-    onChange?.(next);
+    (onApply || onChange)?.(next);
   };
 
   const resetGrid = () => {

@@ -1,6 +1,7 @@
 package com.graphmind.backend.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
+//import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.graphmind.backend.domain.VaultItem;
 import com.graphmind.backend.domain.VaultItemSummary;
 import com.graphmind.backend.service.VaultService;
@@ -8,17 +9,18 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import java.util.NoSuchElementException;
 
 import java.util.List;
 
 /**
- * ✅ 405 Method Not Allowed / 404 Not Found 해결 포인트
- * - 프론트가 PATCH /api/v1/vault/items/{id} 또는 /content 로 저장을 시도함
- * - 기존 백엔드에 해당 매핑이 없어서:
- *   - /content: 404 (경로 없음)
- *   - /items/{id}: 405 (경로는 있으나 PATCH 메서드 미지원)
+ * ??405 Method Not Allowed / 404 Not Found ?닿껐 ?ъ씤??
+ * - ?꾨줎?멸? PATCH /api/v1/vault/items/{id} ?먮뒗 /content 濡???μ쓣 ?쒕룄??
+ * - 湲곗〈 諛깆뿏?쒖뿉 ?대떦 留ㅽ븨???놁뼱??
+ *   - /content: 404 (寃쎈줈 ?놁쓬)
+ *   - /items/{id}: 405 (寃쎈줈???덉쑝??PATCH 硫붿꽌??誘몄???
  *
- * 따라서 아래 2개를 추가:
+ * ?곕씪???꾨옒 2媛쒕? 異붽?:
  * - PATCH /items/{id}
  * - PATCH /items/{id}/content
  */
@@ -77,26 +79,72 @@ public class VaultController {
     }
 
     // =========================
-    // ✅ Patch: content only (NEW)
-    // 프론트에서 { content: ... } 또는 content 자체(Json)로 보낼 수 있으므로 둘 다 지원.
+    // ??Patch: content only (NEW)
+    // ?꾨줎?몄뿉??{ content: ... } ?먮뒗 content ?먯껜(Json)濡?蹂대궪 ???덉쑝誘濡?????吏??
     // =========================
     @PatchMapping("/items/{id}/content")
-    public VaultItem patchContent(HttpServletRequest req, @PathVariable String id, @RequestBody JsonNode body) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void patchContent(
+            HttpServletRequest req,
+            @PathVariable String id,
+            @RequestBody JsonNode body
+    ) {
         JsonNode content = body;
         if (body != null && body.has("content")) {
             content = body.get("content");
         }
-        return vault.patchContent(userId(req), id, content);
+
+        String uid = userId(req);
+
+        // ???먯씤 ?뺤젙??濡쒓렇 媛뺥솕
+        System.out.printf(
+                "[vault] PATCH /content uid=%s id=%s bodyType=%s contentType=%s contentLength=%s%n",
+                uid,
+                id,
+                (body == null ? "null" : body.getNodeType()),
+                (content == null ? "null" : content.getNodeType()),
+                req.getHeader("Content-Length")
+        );
+
+        try {
+            vault.patchContent(uid, id, content);
+        } catch (NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace(); // ???ш린???쒕쾭 肄섏넄???ㅽ깮??諛섎뱶???좎빞 ??
+            throw e;
+        }
     }
 
+
+
+
+
     // =========================
-    // ✅ Patch: generic item patch (NEW)
-    // curve3d/surface3d/array3d 포함해서 필요한 필드만 PATCH 가능
+    // ??Patch: generic item patch (NEW)
+    // curve3d/surface3d/array3d ?ы븿?댁꽌 ?꾩슂???꾨뱶留?PATCH 媛??
     // =========================
     @PatchMapping("/items/{id}")
     public VaultItem patchItem(HttpServletRequest req, @PathVariable String id, @RequestBody VaultService.VaultItemPatch patch) {
-        return vault.patchItem(userId(req), id, patch);
+        String uid = userId(req);
+
+        // ???먯씤 ?뺤젙??濡쒓렇
+        try {
+            System.out.printf(
+                    "[vault] PATCH /items uid=%s id=%s type=%s title=%s formula=%s expr=%s hasContent=%s%n",
+                    uid,
+                    id,
+                    patch.type(),
+                    patch.title(),
+                    patch.formula(),
+                    patch.expr(),
+                    (patch.content() != null)
+            );
+        } catch (Exception ignore) {}
+
+        return vault.patchItem(uid, id, patch);
     }
+
 
     // =========================
     // Get / Delete
@@ -112,3 +160,4 @@ public class VaultController {
         vault.delete(userId(req), id);
     }
 }
+
