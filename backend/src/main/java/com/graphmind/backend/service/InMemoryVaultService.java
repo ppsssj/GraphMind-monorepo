@@ -41,20 +41,32 @@ public class InMemoryVaultService implements VaultService {
         String id = UUID.randomUUID().toString();
         Instant now = Instant.now();
 
+        JsonNode content = body.content();
+        String type = body.type();
+
+        String expr = body.expr();
+        Integer samples = body.samples();
+
+        // ✅ create에서도 content가 있으면 요약값 동기화
+        if (content != null && type != null) {
+            expr = deriveExpr(type, content, expr);
+            samples = deriveSamples(type, content, samples);
+        }
+
         VaultItem item = new VaultItem(
                 id,
                 userId,
                 orDefault(body.title(), defaultTitle(body.type())),
                 body.type(),
                 body.formula(),
-                body.expr(),
-                body.samples(),
+                expr,
+                samples,
                 body.axisOrder(),
                 body.sizeX(),
                 body.sizeY(),
                 body.sizeZ(),
                 normTags(body.tags()),
-                body.content(),
+                content,
                 body.links() == null ? List.of() : body.links(),
                 now
         );
@@ -69,20 +81,32 @@ public class InMemoryVaultService implements VaultService {
         VaultItem prev = getOwned(userId, id);
         Instant now = Instant.now();
 
+        JsonNode nextContent = body.content() != null ? body.content() : prev.content();
+        String nextType = orDefault(body.type(), prev.type());
+
+        String nextExpr = body.expr() != null ? body.expr() : prev.expr();
+        Integer nextSamples = body.samples() != null ? body.samples() : prev.samples();
+
+        // ✅ update에서도 content가 있으면 요약값 동기화
+        if (nextContent != null && nextType != null) {
+            nextExpr = deriveExpr(nextType, nextContent, nextExpr);
+            nextSamples = deriveSamples(nextType, nextContent, nextSamples);
+        }
+
         VaultItem next = new VaultItem(
                 prev.id(),
                 prev.userId(),
                 orDefault(body.title(), prev.title()),
-                orDefault(body.type(), prev.type()),
+                nextType,
                 orDefault(body.formula(), prev.formula()),
-                orDefault(body.expr(), prev.expr()),
-                body.samples() != null ? body.samples() : prev.samples(),
+                nextExpr,
+                nextSamples,
                 orDefault(body.axisOrder(), prev.axisOrder()),
                 body.sizeX() != null ? body.sizeX() : prev.sizeX(),
                 body.sizeY() != null ? body.sizeY() : prev.sizeY(),
                 body.sizeZ() != null ? body.sizeZ() : prev.sizeZ(),
                 body.tags() != null ? normTags(body.tags()) : prev.tags(),
-                body.content() != null ? body.content() : prev.content(),
+                nextContent,
                 body.links() != null ? body.links() : prev.links(),
                 now
         );
@@ -130,7 +154,7 @@ public class InMemoryVaultService implements VaultService {
     }
 
     // =========================
-    // content 부분 업데이트 (/content)
+    // ✅ /content PATCH: content + 요약값 동기화
     // =========================
     @Override
     public VaultItem patchContent(String userId, String id, JsonNode content) {
@@ -138,58 +162,13 @@ public class InMemoryVaultService implements VaultService {
         Instant now = Instant.now();
 
         JsonNode nextContent = (content != null) ? content : prev.content();
-        List<String> nextTags = (prev.tags() != null) ? prev.tags() : List.of();
-        List<LinkRef> nextLinks = (prev.links() != null) ? prev.links() : Collections.emptyList();
 
-        // ✅ content 저장 시 top-level preview 필드 동기화
         String nextExpr = prev.expr();
         Integer nextSamples = prev.samples();
-        String type = prev.type();
 
-        if (nextContent != null && nextContent.isObject()) {
-            if ("surface3d".equals(type)) {
-                // surface3d: 대표 expr은 content.expr 우선
-                String ce = firstText(nextContent, "expr", "zExpr", "formula");
-                if (ce != null) nextExpr = ce;
-
-                // samples: samples 우선, 없으면 nx(=해상도)로 대체
-                Integer s = firstInt(nextContent, "samples");
-                if (s != null) {
-                    nextSamples = s;
-                } else {
-                    Integer nx = firstInt(nextContent, "nx");
-                    if (nx != null) nextSamples = nx;
-                }
-
-            } else if ("curve3d".equals(type)) {
-                // curve3d: samples 동기화
-                Integer s = firstInt(nextContent, "samples", "nSamples", "n");
-                if (s != null) nextSamples = s;
-
-                // curve3d: top-level expr을 x/y/z 요약 문자열로 동기화 (프리뷰/검색용)
-                String x = firstText(nextContent, "xExpr", "x");
-                String y = firstText(nextContent, "yExpr", "y");
-                String z = firstText(nextContent, "zExpr", "z");
-
-                if (x != null || y != null || z != null) {
-                    StringBuilder sb = new StringBuilder();
-                    if (x != null) sb.append("x(t)=").append(x);
-                    if (y != null) {
-                        if (sb.length() > 0) sb.append(", ");
-                        sb.append("y(t)=").append(y);
-                    }
-                    if (z != null) {
-                        if (sb.length() > 0) sb.append(", ");
-                        sb.append("z(t)=").append(z);
-                    }
-                    nextExpr = sb.toString();
-                }
-
-            } else if ("equation".equals(type)) {
-                // equation도 content로 오는 경우가 있으면 expr 요약 갱신(선택)
-                String ce = firstText(nextContent, "expr", "formula");
-                if (ce != null) nextExpr = ce;
-            }
+        if (nextContent != null && prev.type() != null) {
+            nextExpr = deriveExpr(prev.type(), nextContent, nextExpr);
+            nextSamples = deriveSamples(prev.type(), nextContent, nextSamples);
         }
 
         VaultItem next = new VaultItem(
@@ -198,15 +177,15 @@ public class InMemoryVaultService implements VaultService {
                 prev.title(),
                 prev.type(),
                 prev.formula(),
-                nextExpr,       // ✅ 동기화된 expr
-                nextSamples,    // ✅ 동기화된 samples
+                nextExpr,
+                nextSamples,
                 prev.axisOrder(),
                 prev.sizeX(),
                 prev.sizeY(),
                 prev.sizeZ(),
-                nextTags,
+                prev.tags() != null ? prev.tags() : List.of(),
                 nextContent,
-                nextLinks,
+                prev.links() != null ? prev.links() : List.of(),
                 now
         );
 
@@ -216,7 +195,7 @@ public class InMemoryVaultService implements VaultService {
     }
 
     // =========================
-    // item 부분 업데이트 (/items patch)
+    // ✅ /items PATCH: content 들어오면 요약값 동기화
     // =========================
     @Override
     public VaultItem patchItem(String userId, String id, VaultItemPatch patch) {
@@ -224,9 +203,7 @@ public class InMemoryVaultService implements VaultService {
         Instant now = Instant.now();
 
         String nextType = prev.type();
-        if (patch.type() != null && !patch.type().isBlank()) {
-            nextType = patch.type().trim();
-        }
+        if (patch.type() != null && !patch.type().isBlank()) nextType = patch.type().trim();
 
         String nextTitle = prev.title();
         if (patch.title() != null) {
@@ -236,26 +213,28 @@ public class InMemoryVaultService implements VaultService {
 
         List<String> nextTags = patch.tags() != null ? normTags(patch.tags()) : prev.tags();
 
-        String nextAxisOrder = prev.axisOrder();
-        if (patch.axisOrder() != null) {
-            nextAxisOrder = orDefault(patch.axisOrder(), prev.axisOrder());
-        }
+        String nextAxisOrder = patch.axisOrder() != null ? orDefault(patch.axisOrder(), prev.axisOrder()) : prev.axisOrder();
 
         Integer nextSizeX = patch.sizeX() != null ? patch.sizeX() : prev.sizeX();
         Integer nextSizeY = patch.sizeY() != null ? patch.sizeY() : prev.sizeY();
         Integer nextSizeZ = patch.sizeZ() != null ? patch.sizeZ() : prev.sizeZ();
 
-        String nextExpr = patch.expr() != null ? patch.expr() : prev.expr();
-        Integer nextSamples = patch.samples() != null ? patch.samples() : prev.samples();
+        JsonNode nextContent = patch.content() != null ? patch.content() : prev.content();
 
-        // formula는 equation 타입일 때만 반영
         String nextFormula = prev.formula();
         if (patch.formula() != null && "equation".equals(nextType)) {
             String f = patch.formula().trim();
             nextFormula = f.isBlank() ? prev.formula() : f;
         }
 
-        JsonNode nextContent = patch.content() != null ? patch.content() : prev.content();
+        String nextExpr = patch.expr() != null ? patch.expr() : prev.expr();
+        Integer nextSamples = patch.samples() != null ? patch.samples() : prev.samples();
+
+        if (nextContent != null && nextType != null) {
+            nextExpr = deriveExpr(nextType, nextContent, nextExpr);
+            nextSamples = deriveSamples(nextType, nextContent, nextSamples);
+        }
+
         List<LinkRef> nextLinks = patch.links() != null ? patch.links() : prev.links();
 
         VaultItem next = new VaultItem(
@@ -369,7 +348,6 @@ public class InMemoryVaultService implements VaultService {
         JsonNode c = item.content();
         if (c == null || !c.isArray() || c.size() == 0) return item;
 
-        // 기본 가정: content[z][y][x]
         int z = c.size();
         int y = c.get(0).isArray() ? c.get(0).size() : 0;
         int x = (y > 0 && c.get(0).get(0).isArray()) ? c.get(0).get(0).size() : 0;
@@ -385,36 +363,72 @@ public class InMemoryVaultService implements VaultService {
         );
     }
 
-    // ✅ content에서 텍스트 값 추출
-    private String firstText(JsonNode obj, String... keys) {
-        if (obj == null) return null;
-        for (String k : keys) {
-            JsonNode v = obj.get(k);
-            if (v != null && !v.isNull()) {
-                String s = v.asText(null);
-                if (s != null) {
-                    s = s.trim();
-                    if (!s.isBlank()) return s;
-                }
+    // ------------------- ✅ derive helpers -------------------
+
+    private String deriveExpr(String type, JsonNode content, String fallback) {
+        if (type == null || content == null || !content.isObject()) return fallback;
+
+        if ("surface3d".equals(type)) {
+            JsonNode n = content.get("expr");
+            if (n != null && n.isTextual()) {
+                String v = n.asText().trim();
+                if (!v.isBlank()) return v;
             }
+            return fallback;
         }
-        return null;
+
+        if ("curve3d".equals(type)) {
+            String x = text(content, "xExpr", text(content, "x", null));
+            String y = text(content, "yExpr", text(content, "y", null));
+            String z = text(content, "zExpr", text(content, "z", null));
+
+            if (x != null || y != null || z != null) {
+                String xx = (x == null || x.isBlank()) ? "0" : x;
+                String yy = (y == null || y.isBlank()) ? "0" : y;
+                String zz = (z == null || z.isBlank()) ? "0" : z;
+                return "x(t)=" + xx + ", y(t)=" + yy + ", z(t)=" + zz;
+            }
+            return fallback;
+        }
+
+        return fallback;
     }
 
-    // ✅ content에서 int 값 추출 (숫자/숫자 문자열 모두 허용)
-    private Integer firstInt(JsonNode obj, String... keys) {
-        if (obj == null) return null;
-        for (String k : keys) {
-            JsonNode v = obj.get(k);
-            if (v == null || v.isNull()) continue;
+    private Integer deriveSamples(String type, JsonNode content, Integer fallback) {
+        if (type == null || content == null || !content.isObject()) return fallback;
 
-            if (v.isInt() || v.isLong() || v.isNumber()) return v.asInt();
-
-            try {
-                String s = v.asText(null);
-                if (s != null) return Integer.parseInt(s.trim());
-            } catch (Exception ignore) {}
+        if ("surface3d".equals(type)) {
+            Integer nx = integer(content, "nx", null);
+            if (nx != null) return nx;
+            Integer s = integer(content, "samples", null);
+            return s != null ? s : fallback;
         }
-        return null;
+
+        if ("curve3d".equals(type)) {
+            Integer s = integer(content, "samples", null);
+            return s != null ? s : fallback;
+        }
+
+        return fallback;
+    }
+
+    private String text(JsonNode obj, String key, String fallback) {
+        JsonNode n = obj.get(key);
+        if (n == null) return fallback;
+        if (n.isTextual()) {
+            String v = n.asText();
+            return v != null ? v.trim() : fallback;
+        }
+        return fallback;
+    }
+
+    private Integer integer(JsonNode obj, String key, Integer fallback) {
+        JsonNode n = obj.get(key);
+        if (n == null) return fallback;
+        if (n.isInt() || n.isLong()) return n.asInt();
+        if (n.isTextual()) {
+            try { return Integer.parseInt(n.asText().trim()); } catch (Exception ignored) {}
+        }
+        return fallback;
     }
 }

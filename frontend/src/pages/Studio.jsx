@@ -2976,92 +2976,96 @@ const persistSurface3D = useCallback(
       let surface3dInit = undefined;
 
       if (type === "curve3d") {
-        const payload =
-          tabContent && typeof tabContent === "object"
-            ? tabContent
-            : raw && typeof raw === "object"
-            ? raw
-            : {};
+        // Studio.jsx - createTab 내부 (type === "curve3d") 블록에서 payload~xExpr 부분 교체
 
-        const xExpr = payload.xExpr ?? payload.x ?? "cos(t)";
-        const yExpr = payload.yExpr ?? payload.y ?? "sin(t)";
-        const zExpr = payload.zExpr ?? payload.z ?? "0";
+const root =
+  tabContent && typeof tabContent === "object"
+    ? tabContent
+    : raw && typeof raw === "object"
+    ? raw
+    : {};
 
-        const tRange = payload.tRange;
-        const tMin =
-          payload.tMin ?? (Array.isArray(tRange) ? tRange[0] : undefined) ?? 0;
-        const tMax =
-          payload.tMax ??
-          (Array.isArray(tRange) ? tRange[1] : undefined) ??
-          2 * Math.PI;
+const c = root?.content && typeof root.content === "object" ? root.content : root;
 
-        const samples = payload.samples ?? payload.sample ?? 400;
-        const editMode = payload.editMode ?? "drag";
+// ✅ content / legacy 키들 모두 커버
+const xExpr = c.x ?? c.xExpr ?? c.xExpr ?? c.x ?? "cos(t)";
+const yExpr = c.y ?? c.yExpr ?? c.yExpr ?? c.y ?? "sin(t)";
+const zExpr = c.z ?? c.zExpr ?? c.zExpr ?? c.z ?? "0";
 
-        const baseXExpr = payload.baseXExpr ?? xExpr;
-        const baseYExpr = payload.baseYExpr ?? yExpr;
-        const baseZExpr = payload.baseZExpr ?? zExpr;
+const tRange = c.tRange;
+const tMin = c.tMin ?? (Array.isArray(tRange) ? tRange[0] : undefined) ?? 0;
+const tMax = c.tMax ?? (Array.isArray(tRange) ? tRange[1] : undefined) ?? 2 * Math.PI;
 
-        const markers = payload.markers ?? [
-          { id: 0, t: tMin },
-          { id: 1, t: (tMin + tMax) / 2, label: "vertex" },
-          { id: 2, t: tMax },
-        ];
+// ✅ samples 오타 보정: payload.sample 말고 samples 우선
+const samples = c.samples ?? c.sample ?? 400;
 
-        curve3dInit = {
-          baseXExpr,
-          baseYExpr,
-          baseZExpr,
-          xExpr,
-          yExpr,
-          zExpr,
-          tMin,
-          tMax,
-          samples,
-          markers,
-          editMode,
-        };
+const editMode = c.editMode ?? "drag";
+const baseXExpr = c.baseXExpr ?? xExpr;
+const baseYExpr = c.baseYExpr ?? yExpr;
+const baseZExpr = c.baseZExpr ?? zExpr;
+
+const markers = c.markers ?? [
+  { id: 0, t: tMin },
+  { id: 1, t: (tMin + tMax) / 2, label: "vertex" },
+  { id: 2, t: tMax },
+];
+
+curve3dInit = {
+  baseXExpr,
+  baseYExpr,
+  baseZExpr,
+  xExpr,
+  yExpr,
+  zExpr,
+  tMin,
+  tMax,
+  samples,
+  markers,
+  editMode,
+};
+
       }
 
       if (type === "surface3d") {
-        const payload =
-          tabContent && typeof tabContent === "object"
-            ? tabContent
-            : raw && typeof raw === "object"
-            ? raw
-            : {};
+        // Studio.jsx - createTab 내부 (type === "surface3d")
 
-        const expr =
-          payload.expr ?? payload.zExpr ?? payload.formula ?? "sin(x) * cos(y)";
-        const xRange = payload.xRange;
-        const yRange = payload.yRange;
+const root =
+  tabContent && typeof tabContent === "object"
+    ? tabContent
+    : raw && typeof raw === "object"
+    ? raw
+    : {};
 
-        const xMin =
-          payload.xMin ?? (Array.isArray(xRange) ? xRange[0] : undefined) ?? -5;
-        const xMax =
-          payload.xMax ?? (Array.isArray(xRange) ? xRange[1] : undefined) ?? 5;
-        const yMin =
-          payload.yMin ?? (Array.isArray(yRange) ? yRange[0] : undefined) ?? -5;
-        const yMax =
-          payload.yMax ?? (Array.isArray(yRange) ? yRange[1] : undefined) ?? 5;
+const c = root?.content && typeof root.content === "object" ? root.content : root;
 
-        const nx = payload.nx ?? payload.samplesX ?? 80;
-        const ny = payload.ny ?? payload.samplesY ?? 80;
+const expr = c.expr ?? c.zExpr ?? c.formula ?? "sin(x) * cos(y)";
 
-        surface3dInit = {
-          expr,
-          xMin,
-          xMax,
-          yMin,
-          yMax,
-          nx,
-          ny,
-          gridMode: payload.gridMode ?? "major",
-          gridStep: payload.gridStep ?? 1,
-          viewMode: payload.viewMode ?? "both",
-          editMode: payload.editMode ?? "drag",
-          minorDiv: payload.minorDiv ?? 4,
-        };
+const xRange = c.xRange;
+const yRange = c.yRange;
+
+const xMin = c.xMin ?? (Array.isArray(xRange) ? xRange[0] : undefined) ?? -5;
+const xMax = c.xMax ?? (Array.isArray(xRange) ? xRange[1] : undefined) ?? 5;
+const yMin = c.yMin ?? (Array.isArray(yRange) ? yRange[0] : undefined) ?? -5;
+const yMax = c.yMax ?? (Array.isArray(yRange) ? yRange[1] : undefined) ?? 5;
+
+const nx = c.nx ?? c.samplesX ?? 80;
+const ny = c.ny ?? c.samplesY ?? 80;
+
+surface3dInit = {
+  expr,
+  xMin,
+  xMax,
+  yMin,
+  yMax,
+  nx,
+  ny,
+  gridMode: c.gridMode ?? "major",
+  gridStep: c.gridStep ?? 1,
+  viewMode: c.viewMode ?? "both",
+  editMode: c.editMode ?? "drag",
+  minorDiv: c.minorDiv ?? 4,
+};
+
       }
 
       const title =
@@ -3808,14 +3812,15 @@ const persistSurface3D = useCallback(
             }
 
             if (res.type === "curve3d") {
-              createTab(res, "left", "curve3d", res, res.title, vid);
+              const payload = res?.content ?? res; // ✅ 핵심
+  createTab(payload, "left", "curve3d", payload, res.title, vid); 
             } else if (res.type === "equation") {
               createTab(res.formula, "left", "equation", null, res.title, vid);
             } else if (res.type === "array3d") {
               createTab(null, "left", "array3d", res.content, res.title, vid);
             } else if (res.type === "surface3d") {
-              const payload = res.surface3d || res;
-              createTab(payload, "left", "surface3d", payload, res.title, vid);
+               const payload = res?.content ?? res?.surface3d ?? res; // ✅ 핵심
+  createTab(payload, "left", "surface3d", payload, res.title, vid);
             }
           }}
         />
