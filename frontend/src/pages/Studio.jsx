@@ -1329,111 +1329,130 @@ export default function Studio() {
   );
 
   const persistCurve3D = useCallback(
-    (vaultId, curve3d) => {
-      if (!vaultId) return;
+  (vaultId, curve3d) => {
+    if (!vaultId) return;
 
-      // ✅ content는 curve3d 객체 자체여야 createTab()이 정상 로딩합니다.
-      const content = cloneCurve3D(curve3d);
+    // ✅ content는 curve3d 객체 자체여야 createTab()이 정상 로딩합니다.
+    const content = cloneCurve3D(curve3d);
 
-      // ✅ 백엔드 VaultItemPatch 스펙에 맞춤: content + samples
-      const payload = {
-        samples: content?.samples,
-        content, // <-- 핵심
-      };
+    // ✅ 로컬 캐시(목록/프리뷰) 먼저 갱신
+    patchVaultLocal(vaultId, { content, samples: content?.samples });
 
-      patchVaultLocal(vaultId, payload);
+    // ✅ 백엔드 저장: /content 선호 (없으면 내부에서 /items로 fallback)
+    void (async () => {
+      try {
+        await persistVaultContent(vaultId, content);
+      } catch (err) {
+        // persistVaultContent 내부에서 UNAUTHORIZED/로그 처리
+      }
+    })();
+  },
+  [patchVaultLocal, persistVaultContent]
+);
 
-      void (async () => {
-        try {
-          await persistVaultItemPatch(vaultId, payload);
-        } catch (err) {}
-      })();
-    },
-    [patchVaultLocal, persistVaultItemPatch]
-  );
+const persistSurface3D = useCallback(
+  (vaultId, surface3d) => {
+    if (!vaultId) return;
 
-  const persistSurface3D = useCallback(
-    (vaultId, surface3d) => {
-      if (!vaultId) return;
+    // ✅ content는 surface3d 객체 자체여야 createTab()이 정상 로딩합니다.
+    const content = cloneSurface3D(surface3d);
 
-      // ✅ content는 surface3d 객체 자체여야 createTab()이 정상 로딩합니다.
-      const content = cloneSurface3D(surface3d);
+    // ✅ 로컬 캐시(목록/프리뷰) 먼저 갱신
+    patchVaultLocal(vaultId, {
+      content,
+      expr: content?.expr,
+      samples: content?.nx ?? content?.samples,
+    });
 
-      // ✅ 백엔드 VaultItemPatch 스펙에 맞춤: content + expr + samples(해상도)
-      const payload = {
-        expr: content?.expr,
-        samples: content?.nx ?? content?.samples, // nx를 대표 샘플로 사용
-        content, // <-- 핵심
-      };
-
-      patchVaultLocal(vaultId, payload);
-
-      void (async () => {
-        try {
-          await persistVaultItemPatch(vaultId, payload);
-        } catch (err) {}
-      })();
-    },
-    [patchVaultLocal, persistVaultItemPatch]
-  );
+    // ✅ 백엔드 저장: /content 선호 (없으면 내부에서 /items로 fallback)
+    void (async () => {
+      try {
+        await persistVaultContent(vaultId, content);
+      } catch (err) {
+        // persistVaultContent 내부에서 UNAUTHORIZED/로그 처리
+      }
+    })();
+  },
+  [patchVaultLocal, persistVaultContent]
+);
 
   // ✅ 새로고침/탭닫기 대비: keepalive 저장(요청이 끊기지 않도록)
   const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080";
 
   const flushActiveTabSave = useCallback(() => {
-    const fp = focusedPaneRef.current || "left";
-    const activeId = panesRef.current?.[fp]?.activeId;
-    if (!activeId) return;
+  const fp = focusedPaneRef.current || "left";
+  const activeId = panesRef.current?.[fp]?.activeId;
+  if (!activeId) return;
 
-    const s = tabStateRef.current?.[activeId];
-    if (!s?.vaultId) return;
+  const s = tabStateRef.current?.[activeId];
+  if (!s?.vaultId) return;
 
-    let patch = null;
+  const token = localStorage.getItem("gm_token") || "";
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
 
-    if (s.type === "equation") {
-      const equation = normalizeFormula(s.equation);
-      const content = buildEquationContent({
-        points: s.points,
-        xmin: s.xmin,
-        xmax: s.xmax,
-        gridStep: s.gridStep,
-        gridMode: s.gridMode,
-        minorDiv: s.minorDiv,
-        viewMode: s.viewMode,
-        editMode: s.editMode,
-        ruleMode: s.ruleMode,
-        rulePolyDegree: s.rulePolyDegree,
-        degree: s.degree,
-      });
-      // ✅ 한번의 PATCH로 formula+content 동시 저장(가장 안정적)
-      patch = { formula: equation, content };
-    } else if (s.type === "curve3d") {
-      const content = cloneCurve3D(s.curve3d);
-      patch = { content, samples: content?.samples };
-    } else if (s.type === "surface3d") {
-      const content = cloneSurface3D(s.surface3d);
-      patch = { content, expr: content?.expr, samples: content?.nx ?? content?.samples };
-    } else {
-      return;
-    }
-
-    const token = localStorage.getItem("gm_token") || "";
-
-    // keepalive: 페이지 언로드 중에도 전송 시도
+  const tryKeepalivePatch = (url, body) => {
     try {
-      fetch(`${API_BASE}/api/v1/vault/items/${s.vaultId}`, {
+      fetch(url, {
         method: "PATCH",
         keepalive: true,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(patch),
+        headers,
+        body: JSON.stringify(body),
       });
-    } catch (e) {
+    } catch {
       // ignore
     }
-  }, [buildEquationContent]);
+  };
+
+  if (s.type === "equation") {
+    const equation = normalizeFormula(s.equation);
+    const content = buildEquationContent({
+      points: s.points,
+      xmin: s.xmin,
+      xmax: s.xmax,
+      gridStep: s.gridStep,
+      gridMode: s.gridMode,
+      minorDiv: s.minorDiv,
+      viewMode: s.viewMode,
+      editMode: s.editMode,
+      ruleMode: s.ruleMode,
+      rulePolyDegree: s.rulePolyDegree,
+      degree: s.degree,
+    });
+
+    // ✅ 평소 저장 방식(/content + /meta)에 맞춰 keepalive도 동일하게 전송
+    tryKeepalivePatch(
+      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
+      { content }
+    );
+    tryKeepalivePatch(
+      `${API_BASE}/api/v1/vault/items/${s.vaultId}/meta`,
+      { formula: equation }
+    );
+    return;
+  }
+
+  if (s.type === "curve3d") {
+    const content = cloneCurve3D(s.curve3d);
+    tryKeepalivePatch(
+      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
+      { content }
+    );
+    return;
+  }
+
+  if (s.type === "surface3d") {
+    const content = cloneSurface3D(s.surface3d);
+    tryKeepalivePatch(
+      `${API_BASE}/api/v1/vault/items/${s.vaultId}/content`,
+      { content }
+    );
+    return;
+  }
+}, [buildEquationContent]);
+
   useEffect(() => {
     const onPageHide = () => flushActiveTabSave();
     const onVisChange = () => {
@@ -3314,13 +3333,14 @@ export default function Studio() {
           [tabId]: { ...cur, curve3d: nextCurve3d, ver: (cur.ver ?? 0) + 1 },
         };
 
+                const vaultId = cur.vaultId ?? null;
+
         const txn = dragTxnRef.current;
-        if (
-          commitLike &&
-          txn &&
-          txn.tabId === tabId &&
-          txn.kind === "curve3d"
-        ) {
+        const txnMatches =
+          commitLike && txn && txn.tabId === tabId && txn.kind === "curve3d";
+
+        if (txnMatches) {
+
           const before = txn.before;
           const after = { curve3d: cloneCurve3D(nextCurve3d) };
 
@@ -3339,6 +3359,9 @@ export default function Studio() {
           if (txn.vaultId) persistCurve3D(txn.vaultId, nextCurve3d);
 
           dragTxnRef.current = null;
+        } else if (commitLike && vaultId) {
+          // ✅ txn이 없거나 매칭이 안 되는 케이스(예: Apply 단독 변경)도 저장 보장
+          persistCurve3D(vaultId, nextCurve3d);
         }
 
         return next;
@@ -3378,13 +3401,14 @@ export default function Studio() {
           },
         };
 
+                const vaultId = cur.vaultId ?? null;
+
         const txn = dragTxnRef.current;
-        if (
-          commitLike &&
-          txn &&
-          txn.tabId === tabId &&
-          txn.kind === "surface3d"
-        ) {
+        const txnMatches =
+          commitLike && txn && txn.tabId === tabId && txn.kind === "surface3d";
+
+        if (txnMatches) {
+
           const before = txn.before;
           const after = { surface3d: cloneSurface3D(nextSurface3d) };
 
@@ -3403,6 +3427,9 @@ export default function Studio() {
           if (txn.vaultId) persistSurface3D(txn.vaultId, nextSurface3d);
 
           dragTxnRef.current = null;
+        } else if (commitLike && vaultId) {
+          // ✅ txn이 없거나 매칭이 안 되는 케이스(예: Apply 단독 변경)도 저장 보장
+          persistSurface3D(vaultId, nextSurface3d);
         }
 
         return next;
@@ -3613,7 +3640,8 @@ export default function Studio() {
             }
 
             if (res.type === "curve3d") {
-              createTab(res, "left", "curve3d", res, res.title, vid);
+              const payload = res?.content ?? res?.curve3d ?? res;
+              createTab(payload, "left", "curve3d", payload, res.title, vid);
             } else if (res.type === "equation") {
               createTab(
                 res.formula,
@@ -3633,7 +3661,7 @@ export default function Studio() {
                 vid
               );
             } else if (res.type === "surface3d") {
-              const payload = res.surface3d || res;
+              const payload = res?.content ?? res?.surface3d ?? res;
               createTab(
                 payload,
                 "left",
