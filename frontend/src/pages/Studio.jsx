@@ -3940,7 +3940,7 @@ surface3dInit = {
                     rulePolyDegree={leftPack.rulePolyDegree}
                     setRulePolyDegree={leftPack.setRulePolyDegree}
                     ruleError={leftPack.ruleError}
-                    showControls={false}
+                    showControls={true}
                   />
                 ) : (
                   <div className="empty-hint">왼쪽에 열린 탭이 없습니다.</div>

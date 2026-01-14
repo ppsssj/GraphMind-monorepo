@@ -1,5 +1,5 @@
 // src/ui/GraphCanvas.jsx
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -12,7 +12,7 @@ import * as THREE from "three";
 import { HandInputProvider } from "../input/HandInputProvider";
 import { useInputPrefs } from "../store/useInputPrefs";
 import OrientationOverlay from "./OrientationOverlay";
-
+import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 function CameraControlBridge({
   cameraApiRef,
   target = new THREE.Vector3(0, 0, 0),
@@ -872,6 +872,89 @@ export default function GraphCanvas({
   const [marquee, setMarquee] = useState(null); // {x0,y0,x1,y1,active}
   const [altDown, setAltDown] = useState(false);
   const suppressAddRef = useRef(false);
+  const downloadText = (filename, text) => {
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const buildTubeFromFn = (fnLike, x0, x1) => {
+    if (typeof fnLike !== "function") return null;
+
+    const steps = 260;
+    const dx = (x1 - x0) / steps;
+
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const x = x0 + dx * i;
+      let y;
+      try {
+        y = fnLike(x);
+      } catch {
+        continue;
+      }
+      const yy = Number(y);
+      if (!Number.isFinite(yy)) continue;
+      pts.push(new THREE.Vector3(x, yy, 0));
+    }
+
+    if (pts.length < 2) return null;
+
+    // 크기 기반으로 튜브 두께 자동 설정
+    const box = new THREE.Box3().setFromPoints(pts);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const diag = Math.max(size.length(), 1e-6);
+
+    const radius = diag * 0.004; // 필요하면 0.002~0.01 조절
+    const tubularSegments = Math.min(Math.max(pts.length * 2, 120), 2200);
+    const radialSegments = 12;
+
+    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
+    const tubeGeo = new THREE.TubeGeometry(
+      curve,
+      tubularSegments,
+      radius,
+      radialSegments,
+      false
+    );
+    tubeGeo.computeVertexNormals();
+
+    const mat = new THREE.MeshStandardMaterial(); // 색은 OBJ에 잘 안 남지만, 형상은 OK
+    return new THREE.Mesh(tubeGeo, mat);
+  };
+
+  const handleExportOBJ = useCallback(() => {
+    const showTypedNow =
+      typedFn && (viewMode === "typed" || viewMode === "both");
+    const showFitNow = fn && (viewMode === "fit" || viewMode === "both");
+
+    const x0 = Number(xmin);
+    const x1 = Number(xmax);
+    if (!Number.isFinite(x0) || !Number.isFinite(x1) || x0 === x1) return;
+
+    const group = new THREE.Group();
+
+    if (showFitNow) {
+      const mesh = buildTubeFromFn(fn, x0, x1);
+      if (mesh) group.add(mesh);
+    }
+
+    if (showTypedNow) {
+      const mesh = buildTubeFromFn(typedFn, x0, x1);
+      if (mesh) group.add(mesh);
+    }
+
+    if (group.children.length === 0) return;
+
+    const exporter = new OBJExporter();
+    const objText = exporter.parse(group);
+    downloadText("graphmind-graphcanvas.obj", objText);
+  }, [xmin, xmax, fn, typedFn, viewMode]);
 
   // ✅ deep-ish signatures to force grid recompute even if parent mutates arrays in-place
   const pointsSig = Array.isArray(points)
@@ -1426,200 +1509,7 @@ export default function GraphCanvas({
 
             return (
               <>
-                <Panel id="rule" title="규칙 기반 편집">
-                  <div
-                    style={{ display: "flex", gap: 6, alignItems: "center" }}
-                  >
-                    <select
-                      value={ruleMode}
-                      onChange={(e) => setRuleMode?.(e.target.value)}
-                      style={{
-                        flex: 1,
-                        background: "rgba(10,10,10,0.85)",
-                        color: "#fff",
-                        border: "1px solid rgba(255,255,255,0.15)",
-                        borderRadius: 8,
-                        padding: "4px 6px",
-                        outline: "none",
-                        fontSize: 11,
-                      }}
-                    >
-                      <option value="free">자유(수식 고정)</option>
-                      <option value="linear">선형: a·x + b</option>
-                      <option value="poly">다항식: 차수 고정</option>
-                      <option value="sin">사인: A·sin(ωx+φ)+C</option>
-                      <option value="cos">코사인: A·cos(ωx+φ)+C</option>
-                      <option value="tan">탄젠트: A·tan(ωx+φ)+C</option>
-                      <option value="exp">지수: A·exp(kx)+C</option>
-                      <option value="log">로그: A·log(kx)+C</option>
-                      <option value="power">거듭제곱: A·x^p + C</option>
-                    </select>
-
-                    {ruleMode === "poly" && (
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={rulePolyDegree}
-                        onChange={(e) =>
-                          setRulePolyDegree?.(Number(e.target.value))
-                        }
-                        style={{
-                          width: 64,
-                          background: "rgba(10,10,10,0.85)",
-                          color: "#fff",
-                          border: "1px solid rgba(255,255,255,0.15)",
-                          borderRadius: 8,
-                          padding: "4px 6px",
-                          outline: "none",
-                          fontSize: 11,
-                        }}
-                        title="다항 차수"
-                      />
-                    )}
-                  </div>
-
-                  <div
-                    style={{ marginTop: 6, opacity: 0.75, lineHeight: 1.35 }}
-                  >
-                    점을 드래그한 뒤 놓으면, 선택한 규칙(함수 family)을 유지한
-                    채 파라미터만 갱신됩니다.
-                  </div>
-
-                  {ruleError && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        color: "#ffcc80",
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      {ruleError}
-                    </div>
-                  )}
-                </Panel>
-
-                <Panel id="view" title="보기">
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      onClick={() => setViewMode("typed")}
-                      style={btnStyle(viewMode === "typed", "#ff5252")}
-                    >
-                      수식만
-                    </button>
-                    <button
-                      onClick={() => setViewMode("fit")}
-                      style={btnStyle(viewMode === "fit", "#64b5f6")}
-                    >
-                      근사만
-                    </button>
-                    <button
-                      onClick={() => setViewMode("both")}
-                      style={btnStyle(viewMode === "both", "#ffffff")}
-                    >
-                      둘다
-                    </button>
-                  </div>
-                </Panel>
-
-                {/* ✅ 격자: 모드 + 간격 */}
-                <Panel id="grid" title="Grid">
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <label style={{ opacity: 0.75, width: 34 }}>Mode</label>
-                    <select
-                      value={gridModeEff}
-                      onChange={(e) => setGridModeEff(e.target.value)}
-                      style={{
-                        flex: 1,
-                        background: "rgba(10,10,10,0.85)",
-                        color: "#fff",
-                        border: "1px solid rgba(255,255,255,0.15)",
-                        borderRadius: 8,
-                        padding: "4px 6px",
-                        outline: "none",
-                        fontSize: 11,
-                      }}
-                    >
-                      <option value="off">Off</option>
-                      <option value="box">Box</option>
-                      <option value="major">Major</option>
-                      <option value="full">Full</option>
-                    </select>
-                  </div>
-
-                  <div
-                    style={{ display: "flex", gap: 6, alignItems: "center" }}
-                  >
-                    <label style={{ opacity: 0.75, width: 34 }}>Step</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0.1"
-                      value={gridStepEff}
-                      onChange={(e) => setGridStepEff(e.target.value)}
-                      style={{
-                        width: 86,
-                        padding: "4px 6px",
-                        borderRadius: 6,
-                        border: "1px solid rgba(255,255,255,0.25)",
-                        background: "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                        outline: "none",
-                      }}
-                      disabled={gridModeEff === "off" || gridModeEff === "box"}
-                      title={
-                        gridModeEff === "off" || gridModeEff === "box"
-                          ? "현재 모드에서는 Step이 적용되지 않습니다."
-                          : "격자 간격"
-                      }
-                    />
-                    <button
-                      onClick={() => setGridStepEff(1)}
-                      style={btnStyle(false, "#ffffff")}
-                      disabled={gridModeEff === "off" || gridModeEff === "box"}
-                    >
-                      1
-                    </button>
-                    <button
-                      onClick={() => setGridStepEff(2)}
-                      style={btnStyle(false, "#ffffff")}
-                      disabled={gridModeEff === "off" || gridModeEff === "box"}
-                    >
-                      2
-                    </button>
-                    <button
-                      onClick={() => setGridStepEff(4)}
-                      style={btnStyle(false, "#ffffff")}
-                      disabled={gridModeEff === "off" || gridModeEff === "box"}
-                    >
-                      4
-                    </button>
-                  </div>
-                </Panel>
-
-                <Panel id="edit" title="편집">
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      onClick={() => setEditMode("arrows")}
-                      style={btnStyle(editMode === "arrows", "#ffffff")}
-                    >
-                      화살표
-                    </button>
-                    <button
-                      onClick={() => setEditMode("drag")}
-                      style={btnStyle(editMode === "drag", "#ffffff")}
-                    >
-                      드래그
-                    </button>
-                  </div>
-                </Panel>
+                
 
                 <Panel id="hand" title="손 입력">
                   <HandToggle />
@@ -1635,6 +1525,27 @@ export default function GraphCanvas({
                     • 오른손 핀치: 드래그
                     <br />• 양손 핀치: 줌<br />• 왼손 펼침: 팬<br />• 오른손
                     주먹: 회전
+                  </div>
+                </Panel>
+                <Panel id="export" title="Export">
+                  <button
+                    onClick={handleExportOBJ}
+                    style={btnStyle(false, "#ffffff")}
+                    disabled={!showFit && !showTyped}
+                    title={
+                      !showFit && !showTyped
+                        ? "내보낼 곡선이 없습니다."
+                        : "OBJ로 내보내기"
+                    }
+                  >
+                    Export OBJ
+                  </button>
+
+                  <div
+                    style={{ marginTop: 6, opacity: 0.75, lineHeight: 1.35 }}
+                  >
+                    * Windows 3D Viewer 호환을 위해 라인을 튜브(메쉬)로 변환해서
+                    저장합니다.
                   </div>
                 </Panel>
               </>
