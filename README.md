@@ -76,6 +76,13 @@
 
 ---
 
+## Demo Video
+
+- **Full demo (mp4, GitHub Release Asset)**: [Download / Open](https://github.com/ppsssj/GraphMind-monorepo/releases/tag/v0.1.0)
+
+> GitHub Release Asset 링크는 환경에 따라 브라우저에서 **바로 재생되지 않고 다운로드**로 동작할 수 있습니다.
+---
+
 ## Workflow (User Flow)
 
 ```mermaid
