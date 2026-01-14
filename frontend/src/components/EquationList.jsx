@@ -1,6 +1,7 @@
 
 // src/components/EquationList.jsx
 import React, { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/EquationList.css";
 
 function Curve3DIcon() {
@@ -78,6 +79,16 @@ export default function EquationList({
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleString();
   };
+const nav = useNavigate();
+
+const navPopToHome = (e) => {
+  const r = e?.currentTarget?.getBoundingClientRect?.();
+  if (r) {
+    nav("/", { state: { origin: { x: r.left + r.width / 2, y: r.top + r.height / 2 } } });
+  } else {
+    nav("/");
+  }
+};
 
   // ✅ equation은 formula 또는 expr 둘 중 하나로 올 수 있음
   const eqTextOf = (note) => (note?.formula || note?.expr || "").toString();
@@ -203,7 +214,8 @@ export default function EquationList({
             height: "100%",
             transition: "all 0.4s",
           }}
-          onClick={() => (window.location.href = "/")}
+onClick={navPopToHome}
+
         >
           <div className="brand">
             <img className="brand-logo" src="/Logo.png" alt="GraphMind logo" />
