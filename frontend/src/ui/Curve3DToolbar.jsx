@@ -259,6 +259,7 @@ export default function Curve3DToolbar({ curve3d, onChange, onApply }) {
           {/* ✅ 노드 추가/삭제 */}
           <button className="toolbar-btn" onClick={addNode}>Add Node</button>
           <button className="toolbar-btn" onClick={removeNode}>Remove Node</button>
+          
         </div>
       </div>
     </div>

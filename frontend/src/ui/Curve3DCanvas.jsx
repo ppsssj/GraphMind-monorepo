@@ -1,4 +1,10 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -9,6 +15,7 @@ import {
 import * as THREE from "three";
 import { create, all } from "mathjs";
 import OrientationOverlay from "./OrientationOverlay.jsx";
+import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 
 const math = create(all, {});
 
@@ -1497,6 +1504,62 @@ export default function Curve3DCanvas({
 
     onMarkerChange?.(idx, pos);
   };
+  const downloadText = (filename, text) => {
+  const blob = new Blob([text], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const handleExportOBJ = () => {
+  const lineObj = editLineRef?.current || baseLineRef?.current;
+  if (!lineObj) return;
+
+  const geom = lineObj.geometry;
+  const posAttr = geom?.getAttribute?.("position");
+  const arr = posAttr?.array;
+  if (!arr || arr.length < 6) return;
+
+  // 1) 포인트 배열 생성
+  const pts = [];
+  for (let i = 0; i < arr.length; i += 3) {
+    const x = arr[i], y = arr[i + 1], z = arr[i + 2];
+    if ([x, y, z].every(Number.isFinite)) pts.push(new THREE.Vector3(x, y, z));
+  }
+  if (pts.length < 2) return;
+
+  // 2) 스케일 기반으로 튜브 반지름 자동 설정
+  const box = new THREE.Box3().setFromPoints(pts);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const diag = Math.max(size.length(), 1e-6);
+
+  const radius = diag * 0.004;        // 필요하면 0.002~0.01 사이 조절
+  const tubularSegments = Math.min(Math.max(pts.length * 2, 100), 2000);
+  const radialSegments = 12;
+
+  // 3) 폴리라인 -> 곡선 -> 튜브 메쉬
+  const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
+  const tubeGeo = new THREE.TubeGeometry(
+    curve,
+    tubularSegments,
+    radius,
+    radialSegments,
+    false
+  );
+  tubeGeo.computeVertexNormals();
+
+  const tubeMat = new THREE.MeshStandardMaterial({ color: 0x22c55e });
+  const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+
+  // 4) OBJ Export
+  const exporter = new OBJExporter();
+  const objText = exporter.parse(tubeMesh);
+  downloadText("graphmind-curve-tube.obj", objText);
+};
 
   // 드래그 끝: 현재 노드 상태를 “수식”으로 확정
   const handleMarkerDragEnd = () => {
@@ -1713,7 +1776,23 @@ export default function Curve3DCanvas({
         />
         <OrientationOverlay controlsRef={controlsRef} />
       </Canvas>
-
+      <button
+        onClick={handleExportOBJ}
+        style={{
+          position: "absolute",
+          left: 10,
+          top: 10,
+          zIndex: 50,
+          background: "rgba(0,0,0,0.55)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.18)",
+          padding: "6px 10px",
+          borderRadius: 10,
+          cursor: "pointer",
+        }}
+      >
+        Export OBJ
+      </button>
       {marqueeBox?.active && (
         <div
           style={{

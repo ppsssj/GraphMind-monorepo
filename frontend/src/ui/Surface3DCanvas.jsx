@@ -5,6 +5,7 @@ import { OrbitControls, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { create, all } from "mathjs";
 import OrientationOverlay from "./OrientationOverlay";
+import { OBJExporter } from "three/examples/jsm/exporters/OBJExporter.js";
 
 const mathjs = create(all, {});
 
@@ -390,9 +391,10 @@ function Surface3DScene({
   onMarkersChange,
   onCommit,
   setSelectRectUI,
+  surfaceObjRef,
 }) {
   const controlsRef = useRef(null);
-  const surfaceRef = useRef(null);
+  //const surfaceRef = useRef(null);
   const planeRef = useRef(null);
 
   const { camera, gl, size } = useThree();
@@ -509,7 +511,7 @@ function Surface3DScene({
       if (!editMode) return;
 
       // 1) surface raycast
-      const surf = surfaceRef.current;
+      const surf = surfaceObjRef.current;
       if (surf) {
         const raycaster = new THREE.Raycaster();
         raycaster.ray.copy(eRay);
@@ -929,7 +931,7 @@ function Surface3DScene({
       />
 
       {/* Surface mesh */}
-      <mesh ref={surfaceRef} geometry={meshData.geometry}>
+      <mesh ref={surfaceObjRef} geometry={meshData.geometry}>
         <meshStandardMaterial
           vertexColors
           roughness={0.6}
@@ -1059,7 +1061,30 @@ export default function Surface3DCanvas({
 }) {
   const f = useMemo(() => makeScalarFn(expr), [expr]);
   const baseF = useMemo(() => makeScalarFn(baseExpr), [baseExpr]);
+  const surfaceObjRef = useRef(null);
+  const downloadText = (filename, text) => {
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
+  const handleExportOBJ = useCallback(() => {
+    const surf = surfaceObjRef.current;
+    if (!surf) return;
+
+    // 월드 변환 반영
+    surf.updateMatrixWorld(true);
+
+    // OBJ Export (형상 위주)
+    const exporter = new OBJExporter();
+    const objText = exporter.parse(surf);
+
+    downloadText("graphmind-surface.obj", objText);
+  }, []);
   // 선택 박스 UI(HTML overlay)
   const [selectRectUI, setSelectRectUI] = useState(null);
   // ✅ 드래그 중 최신 markers 스냅샷 유지(최종 fit 시 stale markers 문제 방지)
@@ -1163,7 +1188,6 @@ export default function Surface3DCanvas({
         zMaxV += 0.5;
       }
     }
-
     const span = zMaxV - zMinV || 1;
     const c = new THREE.Color();
     for (let j = 0; j < gy; j++) {
@@ -1346,8 +1370,28 @@ export default function Surface3DCanvas({
           onMarkersChange={emitMarkersChange}
           onCommit={commitFit}
           setSelectRectUI={setSelectRectUI}
+          surfaceObjRef={surfaceObjRef}
         />
       </Canvas>
+      <button
+        onClick={handleExportOBJ}
+        style={{
+          position: "absolute",
+          left: 8,
+          top: 8,
+          zIndex: 20,
+          background: "rgba(0,0,0,0.55)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.18)",
+          padding: "6px 10px",
+          borderRadius: 10,
+          cursor: "pointer",
+          fontSize: 12,
+        }}
+        title="Export surface as OBJ"
+      >
+        Export OBJ
+      </button>
 
       {/* Selection Box UI (옵션) */}
       {selectRectUI && (
@@ -1367,7 +1411,7 @@ export default function Surface3DCanvas({
       )}
 
       {/* HUD */}
-      <div
+      {/* <div
         style={{
           position: "absolute",
           right: 8,
@@ -1398,7 +1442,7 @@ export default function Surface3DCanvas({
           <br />
           grid: {gridMode}, step: {gridStep}, minorDiv: {minorDiv}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
