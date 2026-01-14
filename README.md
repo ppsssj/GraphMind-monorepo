@@ -27,7 +27,13 @@
 | Surface3D | Array3D |
 |---|---|
 | ![Surface3D](assets/surface3d.png) | ![Array3D](assets/array3d.png) |
+---
 
+## Demo Video
+
+- **Full demo (mp4, GitHub Release Asset)**: [Download / Open](https://github.com/ppsssj/GraphMind-monorepo/releases/tag/v0.1.0)
+
+> GitHub Release Asset 링크는 환경에 따라 브라우저에서 **바로 재생되지 않고 다운로드**로 동작할 수 있습니다.
 ---
 
 ## Project Overview
@@ -74,13 +80,7 @@
 - Vault 항목에서 **Studio로 바로 전환**하여 편집/확장 작업 수행
 - 태그 기반 분류/검색 UI 확장 용이
 
----
 
-## Demo Video
-
-- **Full demo (mp4, GitHub Release Asset)**: [Download / Open](https://github.com/ppsssj/GraphMind-monorepo/releases/tag/v0.1.0)
-
-> GitHub Release Asset 링크는 환경에 따라 브라우저에서 **바로 재생되지 않고 다운로드**로 동작할 수 있습니다.
 ---
 
 ## Workflow (User Flow)
