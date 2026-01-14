@@ -374,14 +374,6 @@ export default function Vault() {
             <button className="vault-btn" onClick={exportJson}>
               Export
             </button>
-
-            <button
-              className="vault-btn"
-              onClick={fetchVault}
-              disabled={loading}
-            >
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
           </div>
         </div>
 

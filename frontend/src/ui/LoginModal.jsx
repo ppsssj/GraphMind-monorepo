@@ -4,7 +4,7 @@ import { api, setToken } from "../api/apiClient";
 import { emitAuthed } from "../utils/authEvent";
 import "./LoginModal.css";
 
-export default function LoginModal({ open, onClose }) {
+export default function LoginModal({ open, onClose, origin }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -18,7 +18,8 @@ export default function LoginModal({ open, onClose }) {
   const [shake, setShake] = useState(false);
 
   const overlayRef = useRef(null);
-  const panelRef = useRef(null);
+  const shellRef = useRef(null); // pop / focus-trap root
+  const panelRef = useRef(null); // tilt target
   const lastActiveElRef = useRef(null);
 
   const canSubmit = useMemo(() => {
@@ -27,7 +28,6 @@ export default function LoginModal({ open, onClose }) {
     return true;
   }, [mode, email, password, displayName]);
 
-  // open 시 초기화
   useEffect(() => {
     if (!open) return;
     setClosing(false);
@@ -40,23 +40,19 @@ export default function LoginModal({ open, onClose }) {
     setShowPw(false);
 
     lastActiveElRef.current = document.activeElement;
-    // 다음 tick에서 패널 포커스
-    setTimeout(() => panelRef.current?.focus?.(), 0);
+    setTimeout(() => shellRef.current?.focus?.(), 0);
   }, [open]);
 
-  // 닫기 애니메이션 포함 close
   const requestClose = () => {
     if (loading) return;
     setClosing(true);
-    // CSS 애니메이션 시간과 맞추기 (LoginModal.css의 closing duration)
     window.setTimeout(() => {
       setClosing(false);
       onClose?.();
-      // 포커스 복귀
       try {
         lastActiveElRef.current?.focus?.();
       } catch {}
-    }, 170);
+    }, 180); // CSS closing과 맞추기
   };
 
   const onSubmit = async () => {
@@ -84,7 +80,6 @@ export default function LoginModal({ open, onClose }) {
       else if (code === "email_required") setErr("이메일을 입력하세요.");
       else setErr(e?.message || "Login failed");
 
-      // 에러 쉐이크 트리거
       setShake(true);
       window.setTimeout(() => setShake(false), 380);
     } finally {
@@ -100,7 +95,7 @@ export default function LoginModal({ open, onClose }) {
       if (e.key === "Escape") requestClose();
 
       if (e.key === "Tab") {
-        const root = panelRef.current;
+        const root = shellRef.current;
         if (!root) return;
 
         const focusables = root.querySelectorAll(
@@ -109,7 +104,6 @@ export default function LoginModal({ open, onClose }) {
         const list = Array.from(focusables).filter(
           (el) => !el.hasAttribute("disabled") && !el.getAttribute("aria-hidden")
         );
-
         if (list.length === 0) return;
 
         const first = list[0];
@@ -130,15 +124,15 @@ export default function LoginModal({ open, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, loading, canSubmit, mode]);
 
-  // 패널 틸트(마우스 이동 기반)
+  // 틸트(마우스 이동 기반) — panelRef(안쪽)에만 회전 변수 적용
   const onPanelMove = (e) => {
     const el = panelRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width;  // 0..1
-    const py = (e.clientY - r.top) / r.height;  // 0..1
-    const rx = (0.5 - py) * 8; // up/down
-    const ry = (px - 0.5) * 10; // left/right
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    const rx = (0.5 - py) * 8;
+    const ry = (px - 0.5) * 10;
     el.style.setProperty("--rx", `${rx.toFixed(2)}deg`);
     el.style.setProperty("--ry", `${ry.toFixed(2)}deg`);
     el.style.setProperty("--mx", `${(px * 100).toFixed(1)}%`);
@@ -154,12 +148,19 @@ export default function LoginModal({ open, onClose }) {
     el.style.setProperty("--my", `30%`);
   };
 
-  // 인풋 내부에서 Enter 제출 (전역 Enter는 금지 유지)
   const onInputKeyDown = (e) => {
     if (e.key === "Enter") onSubmit();
   };
 
   if (!open) return null;
+
+  // ✅ origin(클릭 지점)을 shell의 transform-origin으로 전달
+  const ox = origin?.x ?? window.innerWidth / 2;
+  const oy = origin?.y ?? window.innerHeight * 0.2;
+  const shellStyle = {
+    "--ox": `${ox}px`,
+    "--oy": `${oy}px`,
+  };
 
   const modal = (
     <div
@@ -167,153 +168,160 @@ export default function LoginModal({ open, onClose }) {
       className={`gm-login-overlay ${closing ? "closing" : ""}`}
       role="dialog"
       aria-modal="true"
-      onMouseDown={() => requestClose()}
+      onMouseDown={requestClose}
     >
+      {/* ✅ pop 애니메이션 담당 shell */}
       <div
-        ref={panelRef}
+        ref={shellRef}
         className={[
-          "gm-login-panel",
+          "gm-login-shell",
           closing ? "closing" : "",
           shake ? "shake" : "",
         ].join(" ")}
+        style={shellStyle}
         onMouseDown={(e) => e.stopPropagation()}
-        onMouseMove={onPanelMove}
-        onMouseLeave={onPanelLeave}
         tabIndex={-1}
       >
-        <div className="gm-login-header">
-          <div>
-            <h3 className="gm-login-title">
-              {mode === "register" ? "Create account" : "Sign in"}
-            </h3>
-            <div className="gm-login-subtitle">
-              {mode === "register"
-                ? "몇 가지 정보만 입력하면 바로 시작할 수 있습니다."
-                : "토큰은 로컬 스토리지(gm_token)에 저장됩니다."}
+        {/* ✅ 기존 스타일/틸트 담당 panel */}
+        <div
+          ref={panelRef}
+          className="gm-login-panel"
+          onMouseMove={onPanelMove}
+          onMouseLeave={onPanelLeave}
+        >
+          <div className="gm-login-header">
+            <div>
+              <h3 className="gm-login-title">
+                {mode === "register" ? "Create account" : "Sign in"}
+              </h3>
+              <div className="gm-login-subtitle">
+                {mode === "register"
+                  ? "몇 가지 정보만 입력하면 바로 시작할 수 있습니다."
+                  : "토큰은 로컬 스토리지(gm_token)에 저장됩니다."}
+              </div>
             </div>
-          </div>
 
-          <button
-            className="gm-login-x"
-            onClick={requestClose}
-            aria-label="Close"
-            type="button"
-            disabled={loading}
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* 모드 토글: 세그먼트 */}
-        <div className="gm-login-seg" data-mode={mode} aria-label="Auth mode">
-          <button
-            className="gm-login-seg-btn"
-            onClick={() => !loading && setMode("login")}
-            disabled={loading}
-            type="button"
-          >
-            Sign in
-          </button>
-          <button
-            className="gm-login-seg-btn"
-            onClick={() => !loading && setMode("register")}
-            disabled={loading}
-            type="button"
-          >
-            Register
-          </button>
-          <span className="gm-login-seg-indicator" aria-hidden="true" />
-        </div>
-
-        <div className="gm-login-field">
-          <label className="gm-login-label">Email</label>
-          <input
-            className="gm-login-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={onInputKeyDown}
-            placeholder="you@example.com"
-            disabled={loading}
-            autoFocus
-            autoComplete="email"
-          />
-        </div>
-
-        {mode === "register" && (
-          <div className="gm-login-field">
-            <label className="gm-login-label">Display name</label>
-            <input
-              className="gm-login-input"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              onKeyDown={onInputKeyDown}
-              placeholder="e.g. ADMIN"
-              disabled={loading}
-              autoComplete="nickname"
-            />
-          </div>
-        )}
-
-        <div className="gm-login-field">
-          <div className="gm-login-label-row">
-            <label className="gm-login-label">Password</label>
             <button
-              className="gm-login-link"
+              className="gm-login-x"
+              onClick={requestClose}
+              aria-label="Close"
               type="button"
-              onClick={() => setShowPw((v) => !v)}
               disabled={loading}
             >
-              {showPw ? "Hide" : "Show"}
+              ✕
             </button>
           </div>
 
-          <input
-            className="gm-login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={onInputKeyDown}
-            placeholder="••••••••"
-            disabled={loading}
-            type={showPw ? "text" : "password"}
-            autoComplete={mode === "register" ? "new-password" : "current-password"}
-          />
-        </div>
+          <div className="gm-login-seg" data-mode={mode} aria-label="Auth mode">
+            <button
+              className="gm-login-seg-btn"
+              onClick={() => !loading && setMode("login")}
+              disabled={loading}
+              type="button"
+            >
+              Sign in
+            </button>
+            <button
+              className="gm-login-seg-btn"
+              onClick={() => !loading && setMode("register")}
+              disabled={loading}
+              type="button"
+            >
+              Register
+            </button>
+            <span className="gm-login-seg-indicator" aria-hidden="true" />
+          </div>
 
-        {err && <div className="gm-login-error">{err}</div>}
+          <div className="gm-login-field">
+            <label className="gm-login-label">Email</label>
+            <input
+              className="gm-login-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={onInputKeyDown}
+              placeholder="you@example.com"
+              disabled={loading}
+              autoFocus
+              autoComplete="email"
+            />
+          </div>
 
-        <div className="gm-login-actions">
-          <button
-            className="gm-login-btn primary"
-            onClick={onSubmit}
-            disabled={loading || !canSubmit}
-            type="button"
-          >
-            {loading ? (
-              <span className="gm-login-working">
-                <span className="gm-login-spinner" aria-hidden="true" />
-                Working...
-              </span>
-            ) : mode === "register" ? (
-              "Create account"
-            ) : (
-              "Sign in"
-            )}
-          </button>
+          {mode === "register" && (
+            <div className="gm-login-field">
+              <label className="gm-login-label">Display name</label>
+              <input
+                className="gm-login-input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onKeyDown={onInputKeyDown}
+                placeholder="e.g. ADMIN"
+                disabled={loading}
+                autoComplete="nickname"
+              />
+            </div>
+          )}
 
-          <button
-            className="gm-login-btn secondary"
-            onClick={requestClose}
-            disabled={loading}
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
+          <div className="gm-login-field">
+            <div className="gm-login-label-row">
+              <label className="gm-login-label">Password</label>
+              <button
+                className="gm-login-link"
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                disabled={loading}
+              >
+                {showPw ? "Hide" : "Show"}
+              </button>
+            </div>
 
-        <div className="gm-login-footnote">
-          {mode === "register"
-            ? "회원가입 후 자동 로그인됩니다."
-            : "보안상 공용 PC에서는 로그인 해제 후 브라우저 데이터를 정리하세요."}
+            <input
+              className="gm-login-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={onInputKeyDown}
+              placeholder="••••••••"
+              disabled={loading}
+              type={showPw ? "text" : "password"}
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+            />
+          </div>
+
+          {err && <div className="gm-login-error">{err}</div>}
+
+          <div className="gm-login-actions">
+            <button
+              className="gm-login-btn primary"
+              onClick={onSubmit}
+              disabled={loading || !canSubmit}
+              type="button"
+            >
+              {loading ? (
+                <span className="gm-login-working">
+                  <span className="gm-login-spinner" aria-hidden="true" />
+                  Working...
+                </span>
+              ) : mode === "register" ? (
+                "Create account"
+              ) : (
+                "Sign in"
+              )}
+            </button>
+
+            <button
+              className="gm-login-btn secondary"
+              onClick={requestClose}
+              disabled={loading}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div className="gm-login-footnote">
+            {mode === "register"
+              ? "회원가입 후 자동 로그인됩니다."
+              : "보안상 공용 PC에서는 로그인 해제 후 브라우저 데이터를 정리하세요."}
+          </div>
         </div>
       </div>
     </div>

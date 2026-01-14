@@ -12,8 +12,41 @@ export default function Intro() {
   const nav = useNavigate();
   const [activeIdx, setActiveIdx] = useState(null);
   const demoRef = useRef(null);
+
   const [loginOpen, setLoginOpen] = useState(false);
-  // 카드에서 사용할 데이터 (배경 이미지 + 설명 포함) - Intro.jsx 안의 useCases를 이걸로 교체
+  const [loginOrigin, setLoginOrigin] = useState({ x: 0, y: 0 });
+  const [authTick, setAuthTick] = useState(0); // 토큰 제거 후 헤더 리렌더용
+
+  const openLoginFromEvent = (e) => {
+    if (e?.currentTarget?.getBoundingClientRect) {
+      const r = e.currentTarget.getBoundingClientRect();
+      setLoginOrigin({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    } else {
+      setLoginOrigin({ x: window.innerWidth - 120, y: 72 });
+    }
+    setLoginOpen(true);
+  };
+// ✅ 페이지 전환 Pop 애니메이션을 위한 origin 포함 네비게이션
+  const navPop = (path, e) => {
+    if (e?.currentTarget?.getBoundingClientRect) {
+      const r = e.currentTarget.getBoundingClientRect();
+      nav(path, {
+        state: { origin: { x: r.left + r.width / 2, y: r.top + r.height / 2 } },
+      });
+    } else {
+      nav(path);
+    }
+  };
+const isAuthed = !!getToken(); // authTick로 재평가
+
+  const handleLogout = () => {
+    // LoginModal 안내 문구대로 gm_token 제거
+    try {
+      localStorage.removeItem("gm_token");
+    } catch {}
+    setAuthTick((v) => v + 1);
+  };
+  // 카드에서 사용할 데이터 (배경 이미지 + 설명 포함)
   const useCases = [
     {
       icon: "🎓",
@@ -44,7 +77,7 @@ export default function Intro() {
       pos: "center 35%",
     },
   ];
-  
+
   return (
     <div className="intro-root">
       <ParticleBackground density={0.00012} accentRatio={0.09} />
@@ -93,14 +126,28 @@ export default function Intro() {
         {/* <button className="ghost" onClick={() => setLoginOpen(true)}>
           Login
         </button> */}
-        <AuthStatusPanel onLoginClick={() => setLoginOpen(true)} />
-        <LoginModal
+        {/* <AuthStatusPanel onLoginClick={openLoginFromEvent} /> */}
+        <div className="header-auth" key={authTick}>
+          {isAuthed ? (
+            <>
+              <button className="cta-small" onClick={(e) => navPop("/vault", e)}>
+                Open Vault
+              </button>
+              <button className="logout-btn" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <button className="cta-small" onClick={openLoginFromEvent}>
+              Sign in
+            </button>
+          )}
+        </div>
+         <LoginModal
           open={loginOpen}
           onClose={() => setLoginOpen(false)}
-          onAuthed={() => {
-            /* 필요하면 상태 갱신 */
-          }}
-        />{" "}
+          origin={loginOrigin}
+        />
       </header>
 
       {/* Hero */}
@@ -124,10 +171,10 @@ export default function Intro() {
             </p>
             <button
               className="cta"
-              onClick={() => {
+              onClick={(e) => {
                 const t = getToken();
-                if (!t) return setLoginOpen(true);
-                nav("/vault");
+                if (!t) return openLoginFromEvent(e);
+                navPop("/vault", e);
               }}
             >
               Start
@@ -334,28 +381,40 @@ export default function Intro() {
           </div>
         </section>
 
-        <section className="cta-banner" aria-labelledby="cta-head">
-          <div className="cta-banner-inner">
-            <p className="cta-kicker">BEYOND SYMBOLS</p>
-            <h2 id="cta-head" className="cta-headline">
-              Math begins in abstraction and finds its proof in the graph.
-            </h2>
-            <p className="cta-sub">
-              Draw your space with a single equation. <br />
-              Explore, learn, and create in real-time 3D.
-            </p>
-            <button
-              className="nav-btn"
-              onClick={() =>
-                document
-                  .getElementById("cta-head")
-                  .scrollIntoView({ behavior: "smooth" })
-              }
-            >
-              Get Started
-            </button>
-          </div>
-        </section>
+        // Intro.jsx 하단 CTA 섹션 부분만 수정
+
+<section className="cta-banner" aria-labelledby="cta-head">
+  <div
+    className="cta-banner-inner cta-hover"
+    onMouseMove={(e) => {
+      const el = e.currentTarget;
+      const r = el.getBoundingClientRect();
+      const x = ((e.clientX - r.left) / r.width) * 100;
+      const y = ((e.clientY - r.top) / r.height) * 100;
+      el.style.setProperty("--mx", `${x.toFixed(1)}%`);
+      el.style.setProperty("--my", `${y.toFixed(1)}%`);
+      el.style.setProperty("--hover", "1");
+    }}
+    onMouseLeave={(e) => {
+      const el = e.currentTarget;
+      el.style.setProperty("--mx", `50%`);
+      el.style.setProperty("--my", `40%`);
+      el.style.setProperty("--hover", "0");
+    }}
+  >
+    <p className="cta-kicker">BEYOND SYMBOLS</p>
+    <h2 id="cta-head" className="cta-headline">
+      Math begins in abstraction and finds its proof in the graph.
+    </h2>
+    <p className="cta-sub">
+      Draw your space with a single equation. <br />
+      Explore, learn, and create in real-time 3D.
+    </p>
+
+    <button className="cta-large">Get Started</button>
+  </div>
+</section>
+
       </main>
 
       <footer className="intro-footer">© Git : ppsssj</footer>

@@ -462,3 +462,111 @@
   border-radius: 12px;
   overflow: hidden;
 }
+/* ---------- Header Auth ---------- */
+.header-auth {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cta-small {
+  background: var(--accent);
+  color: #100a1a;
+  border: none;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-weight: 800;
+  font-size: 13px;
+  transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+}
+
+.cta-small:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(142, 124, 255, 0.25);
+  filter: brightness(1.03);
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(220, 225, 245, 0.92);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.logout-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+/* ===== CTA Hover: mouse-position spotlight ===== */
+
+.cta-hover {
+  /* 기본값 (마우스가 없을 때) */
+  --mx: 50%;
+  --my: 40%;
+  --hover: 0;
+
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+
+  /* 전환이 "부드럽게 따라오는" 느낌 */
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+
+/* 배경 라이트 스팟 */
+.cta-hover::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+
+  /* 마우스 위치에서 퍼지는 조명 */
+  background:
+    radial-gradient(
+      520px 280px at var(--mx) var(--my),
+      rgba(142, 124, 255, calc(0.22 + var(--hover) * 0.18)),
+      transparent 62%
+    ),
+    radial-gradient(
+      900px 420px at var(--mx) var(--my),
+      rgba(120, 210, 255, calc(0.08 + var(--hover) * 0.10)),
+      transparent 70%
+    );
+
+  opacity: 1;
+}
+
+/* 보더/글로우 라인 */
+.cta-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 18px;
+
+  border: 1px solid rgba(255, 255, 255, calc(0.10 + var(--hover) * 0.12));
+  box-shadow:
+    0 18px 60px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+
+/* 내용이 pseudo element 위로 오도록 */
+.cta-hover > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 살짝 떠오르는 인터랙션 */
+.cta-hover:hover {
+  transform: translateY(-1px);
+}
+
+/* 헤드라인에 아주 미세한 하이라이트(선택) */
+.cta-hover:hover .cta-headline {
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
