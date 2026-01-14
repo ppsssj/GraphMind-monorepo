@@ -1,8 +1,6 @@
 .gm-login-overlay {
   position: fixed;
   inset: 0;
-
-  /* ✅ 최상단 보장 */
   z-index: 2147483647;
   isolation: isolate;
 
@@ -11,38 +9,192 @@
   align-items: center;
   justify-content: center;
 
-  /* ✅ 뒤 요소가 클릭되는 현상 방지 */
   pointer-events: auto;
+
+  /* 오픈 애니메이션 */
+  animation: gmFadeIn 160ms ease-out both;
+  backdrop-filter: blur(6px);
+}
+
+.gm-login-overlay.closing {
+  animation: gmFadeOut 170ms ease-in both;
+}
+
+@keyframes gmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes gmFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 .gm-login-panel {
   width: min(420px, calc(100vw - 32px));
-  border-radius: 14px;
-  background: rgba(20, 22, 28, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   padding: 16px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
   color: #fff;
+
+  /* 3D 틸트 */
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 140ms ease, box-shadow 140ms ease;
+  outline: none;
+
+  /* 오픈 애니메이션 */
+  animation: gmPopIn 180ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+
+  /* 라이트 스윕 (마우스 위치 기반) */
+  position: relative;
+  overflow: hidden;
+}
+
+.gm-login-panel::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  background:
+    radial-gradient(500px 240px at var(--mx, 50%) var(--my, 30%),
+      rgba(255, 255, 255, 0.10),
+      transparent 60%);
+  opacity: 0.9;
+}
+
+.gm-login-panel.closing {
+  animation: gmPopOut 170ms ease-in both;
+}
+
+@keyframes gmPopIn {
+  from { transform: translateY(10px) scale(0.985); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+@keyframes gmPopOut {
+  from { transform: translateY(0) scale(1); opacity: 1; }
+  to   { transform: translateY(8px) scale(0.99); opacity: 0; }
+}
+
+.gm-login-panel.shake {
+  animation: gmShake 360ms ease-in-out;
+}
+
+@keyframes gmShake {
+  0%   { transform: translateX(0) perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  20%  { transform: translateX(-8px) perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  40%  { transform: translateX(7px)  perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  60%  { transform: translateX(-6px) perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  80%  { transform: translateX(4px)  perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
+  100% { transform: translateX(0) perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); }
 }
 
 .gm-login-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .gm-login-title {
   margin: 0;
   font-size: 16px;
+  letter-spacing: 0.2px;
+}
+
+.gm-login-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.4;
 }
 
 .gm-login-x {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.72);
   cursor: pointer;
   font-size: 16px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: background 120ms ease, color 120ms ease;
+  position: relative;
+  z-index: 1;
+}
+
+.gm-login-x:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.90);
+}
+
+.gm-login-x:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gm-login-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  padding: 4px;
+  position: relative;
+  margin-bottom: 12px;
+  z-index: 1;
+}
+
+.gm-login-seg-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  padding: 9px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  transition: color 120ms ease;
+  font-size: 12px;
+}
+
+.gm-login-seg-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.gm-login-seg-indicator {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: calc(50% - 4px);
+  left: 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+  transition: transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.gm-login-seg[data-mode="register"] .gm-login-seg-indicator {
+  transform: translateX(calc(100% + 4px));
+}
+
+.gm-login-seg[data-mode="login"] .gm-login-seg-btn:first-child,
+.gm-login-seg[data-mode="register"] .gm-login-seg-btn:last-child {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.gm-login-field {
+  margin-top: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .gm-login-label {
@@ -52,49 +204,129 @@
   margin-bottom: 6px;
 }
 
+.gm-login-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.gm-login-link {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.70);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.gm-login-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.90);
+}
+
+.gm-login-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .gm-login-input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.25);
   color: white;
   outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.gm-login-input:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .gm-login-actions {
   display: flex;
   gap: 10px;
   margin-top: 14px;
+  position: relative;
+  z-index: 1;
 }
 
 .gm-login-btn {
   flex: 1;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: white;
   cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.gm-login-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.gm-login-btn:active {
+  transform: translateY(0);
 }
 
 .gm-login-btn.secondary {
   background: transparent;
 }
 
+.gm-login-btn.primary {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .gm-login-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
+  transform: none;
+}
+
+.gm-login-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.gm-login-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  animation: gmSpin 800ms linear infinite;
+}
+
+@keyframes gmSpin {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
 }
 
 .gm-login-error {
   margin-top: 10px;
   color: #ff7676;
   font-size: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .gm-login-footnote {
   margin-top: 12px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.55);
+  position: relative;
+  z-index: 1;
 }
