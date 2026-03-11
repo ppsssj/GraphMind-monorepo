@@ -7,7 +7,7 @@ export default function Array3DView({
   data,
   threshold = 0,
   axisOrder = "zyx",
-  // 필요하면 Studio/Toolbar에서 제어
+  renderMode = "binary",
   enablePan = true,
   enableRotate = true,
   enableZoom = true,
@@ -18,6 +18,7 @@ export default function Array3DView({
         data={data}
         threshold={threshold}
         axisOrder={axisOrder}
+        renderMode={renderMode}
         enablePan={enablePan}
         enableRotate={enableRotate}
         enableZoom={enableZoom}

@@ -65,6 +65,8 @@ export default function Array3DToolBar({
   setThreshold,
   axisOrder,
   setAxisOrder,
+  renderMode,
+  setRenderMode,
 }) {
   const dims = useMemo(
     () => getDimsByOrder(data, axisOrder),
@@ -202,6 +204,21 @@ export default function Array3DToolBar({
       </div>
 
       <div className="array-toolbar-right">
+        <div className="array-toolbar-field">
+          <label className="array-toolbar-label">Render</label>
+          <button
+            type="button"
+            className={`btn array-toolbar-btn array-toolbar-toggle ${
+              renderMode === "value" ? "is-active" : ""
+            }`}
+            onClick={() =>
+              setRenderMode((prev) => (prev === "value" ? "binary" : "value"))
+            }
+          >
+            {renderMode === "value" ? "Show Values" : "Classic Box"}
+          </button>
+        </div>
+
         <div className="array-toolbar-field">
           <label className="array-toolbar-label">Axis</label>
           <select

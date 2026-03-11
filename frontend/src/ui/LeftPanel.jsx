@@ -600,9 +600,23 @@ export default function LeftPanel({
           <div className="label">Open Graph</div>
           <button
             className="btn solid"
-            onClick={() => setShowQuick((prev) => !prev)}
+            onClick={() => {
+              if (onNew) {
+                onNew();
+                return;
+              }
+              setShowQuick((prev) => !prev);
+            }}
           >
             + New Graph
+          </button>
+
+          <button
+            className="btn ghost"
+            style={{ marginTop: 8 }}
+            onClick={() => setShowQuick((prev) => !prev)}
+          >
+            {showQuick ? "Hide Quick Picks" : "Quick Picks"}
           </button>
 
           <div className={`fade-down ${showQuick ? "open" : ""}`}>

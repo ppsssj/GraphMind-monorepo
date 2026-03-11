@@ -12,6 +12,7 @@ import Curve3DView from "../ui/Curve3DView";
 import Surface3DView from "../ui/Surface3DView";
 import { dummyResources } from "../data/dummyEquations";
 import { api } from "../api/apiClient";
+import NewResourceModal from "../components/NewResourceModal";
 import {
   VAULT_KEY,
   uid,
@@ -42,6 +43,7 @@ import {
   buildCurve3DInitialState,
   buildSurface3DInitialState,
 } from "./studio/studioUtils";
+import { buildVaultItemPayload } from "../utils/resourceDrafts";
 // (studioReducer import removed: not used in this Studio-only integration)
 import "../styles/Studio.css";
 import AIPanel from "../components/ai/AIPanel";
@@ -49,6 +51,7 @@ import AIPanel from "../components/ai/AIPanel";
 export default function Studio() {
   const location = useLocation();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+  const [showNewResourceModal, setShowNewResourceModal] = useState(false);
 
   const [vaultResources, setVaultResources] = useState([]);
   const [vaultLoading, setVaultLoading] = useState(false);
@@ -117,7 +120,8 @@ export default function Studio() {
     fromVault &&
     (initialType === "equation" ||
       initialType === "curve3d" ||
-      initialType === "surface3d")
+      initialType === "surface3d" ||
+      initialType === "array3d")
       ? location.state?.id ?? null
       : null;
 
@@ -270,6 +274,7 @@ export default function Studio() {
 
   const [arrayThreshold, setArrayThreshold] = useState(0);
   const [arrayAxisOrder, setArrayAxisOrder] = useState("zyx");
+  const [arrayRenderMode, setArrayRenderMode] = useState("binary");
 
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [panes, setPanes] = useState({
@@ -2241,6 +2246,114 @@ const persistSurface3D = useCallback(
     [focusedPane, makeInitialPoints]
   );
 
+  const openResourceDraft = useCallback(
+    (payload, vaultId = null) => {
+      if (!payload || !payload.type) return;
+
+      if (payload.type === "equation") {
+        createTab(
+          payload.formula ?? "x",
+          "left",
+          "equation",
+          null,
+          payload.title,
+          vaultId
+        );
+        return;
+      }
+
+      if (payload.type === "curve3d") {
+        createTab(
+          {
+            xExpr: payload.x ?? "cos(t)",
+            yExpr: payload.y ?? "sin(t)",
+            zExpr: payload.z ?? "t",
+            tRange: Array.isArray(payload.tRange) ? payload.tRange : [0, 2 * Math.PI],
+            samples: payload.samples ?? 400,
+          },
+          "left",
+          "curve3d",
+          {
+            xExpr: payload.x ?? "cos(t)",
+            yExpr: payload.y ?? "sin(t)",
+            zExpr: payload.z ?? "t",
+            tRange: Array.isArray(payload.tRange) ? payload.tRange : [0, 2 * Math.PI],
+            samples: payload.samples ?? 400,
+          },
+          payload.title,
+          vaultId
+        );
+        return;
+      }
+
+      if (payload.type === "surface3d") {
+        createTab(
+          {
+            expr: payload.formula ?? "sin(x) * cos(y)",
+            xRange: Array.isArray(payload.xRange) ? payload.xRange : [-5, 5],
+            yRange: Array.isArray(payload.yRange) ? payload.yRange : [-5, 5],
+            samples: payload.samples ?? 80,
+            nx: payload.samples ?? 80,
+            ny: payload.samples ?? 80,
+          },
+          "left",
+          "surface3d",
+          {
+            expr: payload.formula ?? "sin(x) * cos(y)",
+            xRange: Array.isArray(payload.xRange) ? payload.xRange : [-5, 5],
+            yRange: Array.isArray(payload.yRange) ? payload.yRange : [-5, 5],
+            samples: payload.samples ?? 80,
+            nx: payload.samples ?? 80,
+            ny: payload.samples ?? 80,
+          },
+          payload.title,
+          vaultId
+        );
+        return;
+      }
+
+      if (payload.type === "array3d") {
+        createTab(
+          null,
+          "left",
+          "array3d",
+          payload.content ?? [[[0]]],
+          payload.title,
+          vaultId
+        );
+      }
+    },
+    [createTab]
+  );
+
+  const handleCreateResource = useCallback(
+    async (payload, action) => {
+      const shouldPersist = Boolean(action?.persist);
+
+      if (!shouldPersist) {
+        openResourceDraft(payload, null);
+        setShowNewResourceModal(false);
+        return;
+      }
+
+      try {
+        const body = buildVaultItemPayload(payload);
+        const created = await api.createVaultItem(body);
+        const vaultId =
+          created?.id ?? created?.vaultId ?? created?.itemId ?? created?.key ?? null;
+
+        if (vaultId) await refreshVaultResources();
+
+        openResourceDraft(payload, vaultId);
+        setShowNewResourceModal(false);
+      } catch (error) {
+        console.error("[studio] create resource failed", error);
+        window.alert("Failed to create the resource in Vault.");
+      }
+    },
+    [openResourceDraft, refreshVaultResources]
+  );
+
   const closeTab = (paneKey, id) => {
     setPanes((p) => {
       const ids = p[paneKey].ids.filter((x) => x !== id);
@@ -2876,7 +2989,7 @@ const persistSurface3D = useCallback(
       {showLeftPanel && (
         <LeftPanel
           onOpenQuick={(f) => createTab(f, "left")}
-          onNew={() => createTab("x", "left")}
+          onNew={() => setShowNewResourceModal(true)}
           equations={equationsFromVault}
           resources={vaultResources}
           onPreview={(f) => {
@@ -2991,6 +3104,8 @@ const persistSurface3D = useCallback(
             setThreshold={setArrayThreshold}
             axisOrder={arrayAxisOrder}
             setAxisOrder={setArrayAxisOrder}
+            renderMode={arrayRenderMode}
+            setRenderMode={setArrayRenderMode}
             // ?????ㅻ쿋??: ??????????됱뎽/undo/redo/????裕??????
             context={activeTabMeta}
             onUndo={undoMove}
@@ -3071,6 +3186,7 @@ const persistSurface3D = useCallback(
                   data={leftActive.content}
                   threshold={arrayThreshold}
                   axisOrder={arrayAxisOrder}
+                  renderMode={arrayRenderMode}
                 />
               ) : leftActive && leftActive.type === "curve3d" ? (
                 <Curve3DView
@@ -3156,6 +3272,7 @@ const persistSurface3D = useCallback(
                       data={rightActive.content}
                       threshold={arrayThreshold}
                       axisOrder={arrayAxisOrder}
+                      renderMode={arrayRenderMode}
                     />
                   ) : rightActive && rightActive.type === "curve3d" ? (
                     <Curve3DView
@@ -3212,6 +3329,19 @@ const persistSurface3D = useCallback(
         currentContext={currentContext}
         onCommand={handleAICommand}
       />
+
+      {showNewResourceModal && (
+        <NewResourceModal
+          title="Create Graph"
+          allowedTypes={["equation", "curve3d", "surface3d", "array3d"]}
+          actions={[
+            { key: "scratch", label: "Open as Scratch", persist: false },
+            { key: "vault", label: "Create in Vault", persist: true },
+          ]}
+          onClose={() => setShowNewResourceModal(false)}
+          onCreate={handleCreateResource}
+        />
+      )}
     </div>
   );
 }
