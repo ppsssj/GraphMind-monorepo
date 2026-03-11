@@ -1,7 +1,7 @@
 // src/ui/Array3DCanvas.jsx
 import React, { useMemo, useLayoutEffect, useRef, useEffect } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, Text } from "@react-three/drei";
+import { Billboard, OrbitControls, Text } from "@react-three/drei";
 import OrientationOverlay from "./OrientationOverlay";
 import * as THREE from "three";
 
@@ -148,18 +148,18 @@ function ValueLabels({ instances, center }) {
       {instances.map((entry) => {
         const [x, y, z] = entry.position;
         return (
-          <Text
-            key={`label-${x}-${y}-${z}`}
-            position={[x, y, z]}
-            fontSize={0.24}
-            color="#f7f8fb"
-            anchorX="center"
-            anchorY="middle"
-            outlineWidth={0.03}
-            outlineColor="#0f172a"
-          >
-            {entry.label}
-          </Text>
+          <Billboard key={`label-${x}-${y}-${z}`} position={[x, y, z]} follow>
+            <Text
+              fontSize={0.24}
+              color="#f7f8fb"
+              anchorX="center"
+              anchorY="middle"
+              outlineWidth={0.03}
+              outlineColor="#0f172a"
+            >
+              {entry.label}
+            </Text>
+          </Billboard>
         );
       })}
     </group>
