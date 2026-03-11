@@ -381,7 +381,6 @@ const isAuthed = !!getToken(); // authTick로 재평가
           </div>
         </section>
 
-        // Intro.jsx 하단 CTA 섹션 부분만 수정
 
 <section className="cta-banner" aria-labelledby="cta-head">
   <div

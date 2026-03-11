@@ -1,7 +1,6 @@
 // src/pages/Studio.jsx
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { create, all } from "mathjs";
 import LeftPanel from "../ui/LeftPanel";
 import Toolbar from "../ui/Toolbar";
 import Curve3DToolbar from "../ui/Curve3DToolbar";
@@ -13,785 +12,39 @@ import Curve3DView from "../ui/Curve3DView";
 import Surface3DView from "../ui/Surface3DView";
 import { dummyResources } from "../data/dummyEquations";
 import { api } from "../api/apiClient";
+import {
+  VAULT_KEY,
+  uid,
+  titleFromFormula,
+  normalizeFormula,
+  exprToFn,
+  cloneMarkers,
+  cloneCurve3D,
+  cloneSurface3D,
+  curve3DSnapshotChanged,
+  surface3DSnapshotChanged,
+  isCurve3DCommitPatch,
+  isSurface3DCommitPatch,
+  normalizeCurve3DPatch,
+  normalizeSurface3DPatch,
+  fitPolyCoeffs,
+  coeffsToFn,
+  aiMakeParamFn,
+  aiFitCurve3DFromMarkers,
+  aiStripEq,
+  aiMakeScalarFn2D,
+  aiFitSurfaceDeltaPolynomial,
+  aiSampleSurfaceExtremum,
+  snapPointsToFn,
+  fitRuleFromPoints,
+  sanitizeCurve3DForPersist,
+  sanitizeSurface3DForPersist,
+  buildCurve3DInitialState,
+  buildSurface3DInitialState,
+} from "./studio/studioUtils";
 // (studioReducer import removed: not used in this Studio-only integration)
 import "../styles/Studio.css";
 import AIPanel from "../components/ai/AIPanel";
-
-const math = create(all, {});
-const VAULT_KEY = "vaultResources"; // ✅ Vault localStorage 키
-
-// ── helpers ─────────────────────────────────────────────────
-const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-const titleFromFormula = (f) => {
-  const core = (f || "")
-    .replace(/^y\s*=\s*/i, "")
-    .replace(/\s+/g, "")
-    .trim();
-  if (!core) return "Untitled";
-  return "y=" + (core.length > 24 ? core.slice(0, 24) + "…" : core);
-};
-
-function normalizeFormula(raw) {
-  if (!raw) return "x";
-  let s = String(raw).trim();
-  s = s.replace(/^y\s*=\s*/i, "");
-  s = s.replace(/e\s*\^\s*\{([^}]+)\}/gi, "exp($1)");
-  s = s.replace(/(\d)(x)/gi, "$1*$2");
-  return s;
-}
-
-function exprToFn(raw) {
-  const rhs = raw?.includes("=") ? raw.split("=").pop() : raw;
-  const expr = String(rhs ?? "").trim();
-  if (!expr) return () => NaN;
-  try {
-    const compiled = math.compile(expr);
-    return (x) => {
-      const y = Number(compiled.evaluate({ x }));
-      return Number.isFinite(y) ? y : NaN;
-    };
-  } catch {
-    return () => NaN;
-  }
-}
-
-const cloneMarkers = (arr) =>
-  Array.isArray(arr) ? arr.map((m) => ({ ...m })) : [];
-
-const cloneCurve3D = (c) => ({
-  ...(c || {}),
-  markers: cloneMarkers(c?.markers),
-});
-
-const cloneSurface3D = (s) => ({
-  ...(s || {}),
-  markers: cloneMarkers(s?.markers),
-});
-
-const curve3DSnapshotChanged = (a, b) => {
-  const ax = String(a?.xExpr ?? "");
-  const ay = String(a?.yExpr ?? "");
-  const az = String(a?.zExpr ?? "");
-  const bx = String(b?.xExpr ?? "");
-  const by = String(b?.yExpr ?? "");
-  const bz = String(b?.zExpr ?? "");
-  if (ax !== bx || ay !== by || az !== bz) return true;
-
-  const am = Array.isArray(a?.markers) ? a.markers : [];
-  const bm = Array.isArray(b?.markers) ? b.markers : [];
-  if (am.length !== bm.length) return true;
-  for (let i = 0; i < am.length; i++) {
-    const p = am[i] || {};
-    const q = bm[i] || {};
-    if (
-      p.id !== q.id ||
-      p.t !== q.t ||
-      p.x !== q.x ||
-      p.y !== q.y ||
-      p.z !== q.z
-    )
-      return true;
-  }
-  return false;
-};
-
-const surface3DSnapshotChanged = (a, b) => {
-  if (String(a?.expr ?? "") !== String(b?.expr ?? "")) return true;
-
-  const am = Array.isArray(a?.markers) ? a.markers : [];
-  const bm = Array.isArray(b?.markers) ? b.markers : [];
-  if (am.length !== bm.length) return true;
-  for (let i = 0; i < am.length; i++) {
-    const p = am[i] || {};
-    const q = bm[i] || {};
-    if (p.id !== q.id || p.x !== q.x || p.y !== q.y || p.z !== q.z) return true;
-  }
-  return false;
-};
-
-const isCurve3DCommitPatch = (patch) => {
-  if (!patch || typeof patch !== "object") return false;
-  return (
-    "xExpr" in patch ||
-    "yExpr" in patch ||
-    "zExpr" in patch ||
-    "baseXExpr" in patch ||
-    "baseYExpr" in patch ||
-    "baseZExpr" in patch ||
-    // ✅ 툴바가 x/y/z로 보낼 가능성까지 커버
-    "x" in patch ||
-    "y" in patch ||
-    "z" in patch
-  );
-};
-
-const isSurface3DCommitPatch = (patch) => {
-  if (!patch || typeof patch !== "object") return false;
-  return (
-    "expr" in patch ||
-    // ✅ 툴바/기존 데이터가 zExpr/formula로 올 수도 있음
-    "zExpr" in patch ||
-    "formula" in patch
-  );
-};
-
-const normalizeCurve3DPatch = (patch) => {
-  if (!patch || typeof patch !== "object") return patch;
-  const p = { ...patch };
-
-  // x/y/z → xExpr/yExpr/zExpr로 정규화
-  if ("x" in p && !("xExpr" in p)) p.xExpr = p.x;
-  if ("y" in p && !("yExpr" in p)) p.yExpr = p.y;
-  if ("z" in p && !("zExpr" in p)) p.zExpr = p.z;
-
-  // baseX/baseY/baseZ 같은 케이스가 있으면 필요 시 추가 가능
-  return p;
-};
-
-const normalizeSurface3DPatch = (patch) => {
-  if (!patch || typeof patch !== "object") return patch;
-  const p = { ...patch };
-
-  // zExpr/formula → expr로 정규화
-  if ("zExpr" in p && !("expr" in p)) p.expr = p.zExpr;
-  if ("formula" in p && !("expr" in p)) p.expr = p.formula;
-
-  return p;
-};
-
-function fitPolyCoeffs(xs, ys, degree) {
-  const V = xs.map((x) => {
-    const row = new Array(degree + 1);
-    let p = 1;
-    for (let j = 0; j <= degree; j++) {
-      row[j] = p;
-      p *= x;
-    }
-    return row;
-  });
-  const XT = math.transpose(V);
-  const A = math.multiply(XT, V);
-  const b = math.multiply(XT, ys);
-  const sol = math.lusolve(A, b);
-  return sol.map((v) => (Array.isArray(v) ? v[0] : v));
-}
-
-const coeffsToFn = (coeffs) => (x) => {
-  let y = 0,
-    p = 1;
-  for (let i = 0; i < coeffs.length; i++) {
-    y += coeffs[i] * p;
-    p *= x;
-  }
-  return y;
-};
-
-function normalizeNestedAssign(expr) {
-  const s = String(expr ?? "");
-  // ((x(t)=BASE) + (REST))  ->  x(t) = ((BASE) + (REST))
-  const m = s.match(
-    /^\(\(\s*([xyz]\(t\))\s*=\s*([\s\S]*?)\)\s*\+\s*\(([\s\S]+)\)\)\s*$/
-  );
-  if (!m) return s;
-  const lhs = m[1];
-  const base = (m[2] ?? "0").trim() || "0";
-  const rest = (m[3] ?? "0").trim() || "0";
-  return `${lhs} = ((${base}) + (${rest}))`;
-}
-
-// ── AI Command helpers (Curve3D / Surface3D) ─────────────────────────────────
-function aiMakeParamFn(expr, paramName = "t") {
-  if (!expr) return () => 0;
-  expr = normalizeNestedAssign(expr);
-  const rhs = String(expr).includes("=") ? String(expr).split("=").pop() : expr;
-  const trimmed = String(rhs ?? "").trim() || "0";
-
-  let compiled;
-  try {
-    compiled = math.parse(trimmed).compile();
-  } catch (e) {
-    console.warn("[AICommand] Curve3D parse failed:", expr, e);
-    return () => 0;
-  }
-
-  return (t) => {
-    try {
-      const v = compiled.evaluate({
-        [paramName]: t,
-        t,
-        pi: Math.PI,
-        e: Math.E,
-      });
-      const n = typeof v === "number" ? v : Number(v?.valueOf?.());
-      return Number.isFinite(n) ? n : 0;
-    } catch {
-      return 0;
-    }
-  };
-}
-
-function aiBuildKernelDeformExpr(deltas, sigma) {
-  const s = Math.max(1e-6, Number(sigma) || 0.6);
-  const eps = 1e-9;
-  const wExpr = (ti) => `exp(-(((t)-(${ti}))/(${s}))^2)`;
-
-  const numTerms = [];
-  const denTerms = [];
-  for (const d of deltas || []) {
-    const ti = Number(d.t);
-    const di = Number(d.delta);
-    if (!Number.isFinite(ti) || !Number.isFinite(di)) continue;
-    if (Math.abs(di) < 1e-12) continue;
-    const wi = wExpr(ti);
-    numTerms.push(`((${di})*(${wi}))`);
-    denTerms.push(`(${wi})`);
-  }
-  if (!numTerms.length) return "0";
-  const num = numTerms.join(" + ");
-  const den = denTerms.length ? `${denTerms.join(" + ")} + (${eps})` : `${eps}`;
-  return `((${num})/(${den}))`;
-}
-
-function aiFitCurve3DFromMarkers({
-  markers,
-  baseXExpr,
-  baseYExpr,
-  baseZExpr,
-  deformSigma,
-}) {
-  const ms = Array.isArray(markers) ? markers : [];
-  const tPoints = ms.filter(
-    (m) =>
-      typeof m?.t === "number" &&
-      Number.isFinite(m.t) &&
-      (!m.kind || m.kind === "control")
-  );
-
-  if (tPoints.length < 2) return null;
-
-  const xt = aiMakeParamFn(baseXExpr ?? "0", "t");
-  const yt = aiMakeParamFn(baseYExpr ?? "0", "t");
-  const zt = aiMakeParamFn(baseZExpr ?? "0", "t");
-
-  const dx = [];
-  const dy = [];
-  const dz = [];
-  for (const m of tPoints) {
-    const t = Number(m.t);
-    const bx = xt(t);
-    const by = yt(t);
-    const bz = zt(t);
-    if (![bx, by, bz].every(Number.isFinite)) continue;
-    dx.push({ t, delta: Number(m.x) - bx });
-    dy.push({ t, delta: Number(m.y) - by });
-    dz.push({ t, delta: Number(m.z) - bz });
-  }
-
-  const rhsOf = (expr) => {
-    const s = String(expr ?? "").trim();
-    if (!s) return "0";
-    if (s.includes("=")) return s.split("=").pop().trim() || "0";
-    return s;
-  };
-
-  const baseXRhs = rhsOf(baseXExpr ?? "0");
-  const baseYRhs = rhsOf(baseYExpr ?? "0");
-  const baseZRhs = rhsOf(baseZExpr ?? "0");
-
-  const newXExpr = `x(t) = ((${baseXRhs}) + (${aiBuildKernelDeformExpr(
-    dx,
-    deformSigma
-  )}))`;
-  const newYExpr = `y(t) = ((${baseYRhs}) + (${aiBuildKernelDeformExpr(
-    dy,
-    deformSigma
-  )}))`;
-  const newZExpr = `z(t) = ((${baseZRhs}) + (${aiBuildKernelDeformExpr(
-    dz,
-    deformSigma
-  )}))`;
-
-  return { xExpr: newXExpr, yExpr: newYExpr, zExpr: newZExpr };
-}
-
-function aiStripEq(expr) {
-  const s = String(expr ?? "");
-  return s.includes("=") ? s.split("=").pop().trim() : s.trim();
-}
-
-function aiMakeScalarFn2D(expr) {
-  const rhs = aiStripEq(expr || "0") || "0";
-  try {
-    const compiled = math.compile(rhs);
-    return (x, y) => {
-      try {
-        const v = compiled.evaluate({ x, y });
-        const num = Number(v);
-        return Number.isFinite(num) ? num : 0;
-      } catch {
-        return 0;
-      }
-    };
-  } catch {
-    return () => 0;
-  }
-}
-
-function aiFmtCoef(x) {
-  if (!Number.isFinite(x)) return "0";
-  const s = x.toFixed(6);
-  return s.replace(/\.?0+$/, "");
-}
-
-function aiBuildPolyExpr2D(terms) {
-  const parts = [];
-  for (const t of terms || []) {
-    const c = t.coef;
-    if (!Number.isFinite(c) || Math.abs(c) < 1e-10) continue;
-    const sign = c >= 0 ? "+" : "-";
-    const abs = Math.abs(c);
-    const coefStr = aiFmtCoef(abs);
-    const factors = [];
-    if (!(abs === 1 && (t.i !== 0 || t.j !== 0))) factors.push(coefStr);
-    if (t.i > 0) factors.push(t.i === 1 ? "x" : `x^${t.i}`);
-    if (t.j > 0) factors.push(t.j === 1 ? "y" : `y^${t.j}`);
-    const body = factors.length ? factors.join("*") : "0";
-    parts.push({ sign, body });
-  }
-  if (!parts.length) return "0";
-  let expr = `${parts[0].sign === "-" ? "-" : ""}${parts[0].body}`;
-  for (let k = 1; k < parts.length; k++)
-    expr += ` ${parts[k].sign} ${parts[k].body}`;
-  return expr;
-}
-
-function aiFitSurfaceDeltaPolynomial(
-  markers,
-  degree,
-  baseFn,
-  domain,
-  opts = {}
-) {
-  const d = Math.max(1, Math.min(6, Math.floor(Number(degree) || 2)));
-  const base = typeof baseFn === "function" ? baseFn : () => 0;
-
-  const markerWeight = Number.isFinite(opts.markerWeight)
-    ? opts.markerWeight
-    : 1.0;
-  const anchorWeight = Number.isFinite(opts.anchorWeight)
-    ? opts.anchorWeight
-    : 0.25;
-  const lambda = Number.isFinite(opts.lambda) ? opts.lambda : 1e-4;
-  const anchorGrid = Math.max(
-    3,
-    Math.min(20, Math.floor(opts.anchorGrid ?? 10))
-  );
-
-  const pts = (Array.isArray(markers) ? markers : [])
-    .map((m) => ({ x: Number(m?.x), y: Number(m?.y), z: Number(m?.z) }))
-    .filter((p) => [p.x, p.y].every(Number.isFinite) && Number.isFinite(p.z));
-
-  if (pts.length < 1) return { ok: false, reason: "points 부족" };
-
-  const basis = [];
-  for (let i = 0; i <= d; i++) {
-    for (let j = 0; j <= d - i; j++) basis.push({ i, j });
-  }
-  const M = basis.length;
-
-  const rows = [];
-  for (const p of pts) {
-    const r = p.z - base(p.x, p.y);
-    rows.push({ x: p.x, y: p.y, r, w: markerWeight });
-  }
-
-  if (
-    domain &&
-    Number.isFinite(domain.xMin) &&
-    Number.isFinite(domain.xMax) &&
-    Number.isFinite(domain.yMin) &&
-    Number.isFinite(domain.yMax)
-  ) {
-    const xmin = domain.xMin,
-      xmax = domain.xMax,
-      ymin = domain.yMin,
-      ymax = domain.yMax;
-    for (let iy = 0; iy < anchorGrid; iy++) {
-      const ty = anchorGrid === 1 ? 0.5 : iy / (anchorGrid - 1);
-      const y = ymin + (ymax - ymin) * ty;
-      for (let ix = 0; ix < anchorGrid; ix++) {
-        const tx = anchorGrid === 1 ? 0.5 : ix / (anchorGrid - 1);
-        const x = xmin + (xmax - xmin) * tx;
-        rows.push({ x, y, r: 0, w: anchorWeight });
-      }
-    }
-  }
-
-  const N = rows.length;
-  const A = math.zeros(N, M);
-  const R = math.zeros(N, 1);
-  const W = math.zeros(N, N);
-
-  for (let r = 0; r < N; r++) {
-    const { x, y, r: rr, w } = rows[r];
-    R.set([r, 0], rr);
-    W.set([r, r], Math.max(1e-8, w));
-    for (let c = 0; c < M; c++) {
-      const { i, j } = basis[c];
-      A.set([r, c], Math.pow(x, i) * Math.pow(y, j));
-    }
-  }
-
-  const AT = math.transpose(A);
-  const ATW = math.multiply(AT, W);
-  const ATWA = math.multiply(ATW, A);
-  const ATWR = math.multiply(ATW, R);
-  const I = math.identity(M);
-  const ATWAreg = math.add(ATWA, math.multiply(lambda, I));
-
-  let wSol;
-  try {
-    wSol = math.lusolve(ATWAreg, ATWR);
-  } catch {
-    return { ok: false, reason: "solve 실패" };
-  }
-
-  const terms = basis.map((b, idx) => ({
-    i: b.i,
-    j: b.j,
-    coef: Number(wSol.get([idx, 0])),
-  }));
-  const deltaExpr = aiBuildPolyExpr2D(terms);
-  return { ok: true, deltaExpr, degree: d };
-}
-
-function aiSampleSurfaceExtremum(fn, domain, nx = 60, ny = 60, mode = "max") {
-  if (!fn || !domain) return null;
-  const xMin = Number(domain.xMin),
-    xMax = Number(domain.xMax),
-    yMin = Number(domain.yMin),
-    yMax = Number(domain.yMax);
-  if (![xMin, xMax, yMin, yMax].every(Number.isFinite)) return null;
-
-  const sx = Math.max(2, Math.floor(nx));
-  const sy = Math.max(2, Math.floor(ny));
-  let best = null;
-  for (let iy = 0; iy < sy; iy++) {
-    const ty = sy === 1 ? 0.5 : iy / (sy - 1);
-    const y = yMin + (yMax - yMin) * ty;
-    for (let ix = 0; ix < sx; ix++) {
-      const tx = sx === 1 ? 0.5 : ix / (sx - 1);
-      const x = xMin + (xMax - xMin) * tx;
-      const z = fn(x, y);
-      if (!Number.isFinite(z)) continue;
-      if (!best) best = { x, y, z };
-      else if (mode === "max" ? z > best.z : z < best.z) best = { x, y, z };
-    }
-  }
-  return best;
-}
-
-// ── rule-based editing (keep formula family, update only parameters) ────────────
-const isFiniteNum = (v) => Number.isFinite(v);
-
-const roundNum = (n, digits = 6) => {
-  const m = 10 ** digits;
-  return Math.round(n * m) / m;
-};
-
-const fmtNum = (n, digits = 6) => {
-  if (!isFiniteNum(n)) return "0";
-  const r = roundNum(n, digits);
-  const v = Object.is(r, -0) ? 0 : r;
-  return String(v);
-};
-
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-function polyEquationFromCoeffs(coeffs) {
-  const eps = 1e-10;
-  const terms = [];
-  for (let i = coeffs.length - 1; i >= 0; i--) {
-    const c = coeffs[i];
-    if (!isFiniteNum(c) || Math.abs(c) < eps) continue;
-
-    const sign = c < 0 ? "-" : "+";
-    const absC = Math.abs(c);
-
-    let term = "";
-    if (i === 0) term = fmtNum(absC);
-    else if (i === 1)
-      term = Math.abs(absC - 1) < 1e-10 ? "x" : `${fmtNum(absC)}*x`;
-    else
-      term = Math.abs(absC - 1) < 1e-10 ? `x^${i}` : `${fmtNum(absC)}*x^${i}`;
-
-    if (terms.length === 0) terms.push((c < 0 ? "-" : "") + term);
-    else terms.push(` ${sign} ${term}`);
-  }
-  return terms.length ? terms.join("") : "0";
-}
-
-function leastSquaresLinear(xs, ys) {
-  const n = xs.length;
-  if (n < 2) return { a: 0, b: ys[0] ?? 0 };
-  let sx = 0,
-    sy = 0,
-    sxx = 0,
-    sxy = 0;
-  for (let i = 0; i < n; i++) {
-    const x = xs[i],
-      y = ys[i];
-    sx += x;
-    sy += y;
-    sxx += x * x;
-    sxy += x * y;
-  }
-  const denom = n * sxx - sx * sx;
-  if (Math.abs(denom) < 1e-12) return { a: 0, b: sy / n };
-  const a = (n * sxy - sx * sy) / denom;
-  const b = (sy - a * sx) / n;
-  return { a, b };
-}
-
-function nelderMead(
-  f,
-  x0,
-  {
-    step = 1,
-    maxIter = 80,
-    tol = 1e-7,
-    alpha = 1,
-    gamma = 2,
-    rho = 0.5,
-    sigma = 0.5,
-  } = {}
-) {
-  const dim = x0.length;
-  const simplex = new Array(dim + 1);
-  simplex[0] = { x: x0.slice(), fx: f(x0) };
-
-  for (let i = 0; i < dim; i++) {
-    const x = x0.slice();
-    x[i] += step;
-    simplex[i + 1] = { x, fx: f(x) };
-  }
-
-  const centroid = (pts) => {
-    const c = new Array(dim).fill(0);
-    for (const p of pts) for (let i = 0; i < dim; i++) c[i] += p.x[i];
-    for (let i = 0; i < dim; i++) c[i] /= pts.length;
-    return c;
-  };
-
-  const distSimplex = () => {
-    const best = simplex[0].x;
-    let m = 0;
-    for (let i = 1; i < simplex.length; i++) {
-      let d = 0;
-      for (let j = 0; j < dim; j++) d += (simplex[i].x[j] - best[j]) ** 2;
-      m = Math.max(m, Math.sqrt(d));
-    }
-    return m;
-  };
-
-  for (let iter = 0; iter < maxIter; iter++) {
-    simplex.sort((a, b) => a.fx - b.fx);
-    if (distSimplex() < tol) break;
-
-    const best = simplex[0];
-    const worst = simplex[dim];
-    const secondWorst = simplex[dim - 1];
-    const c = centroid(simplex.slice(0, dim));
-
-    const xr = c.map((ci, i) => ci + alpha * (ci - worst.x[i]));
-    const fr = f(xr);
-
-    if (fr < best.fx) {
-      const xe = c.map((ci, i) => ci + gamma * (xr[i] - ci));
-      const fe = f(xe);
-      simplex[dim] = fe < fr ? { x: xe, fx: fe } : { x: xr, fx: fr };
-      continue;
-    }
-
-    if (fr < secondWorst.fx) {
-      simplex[dim] = { x: xr, fx: fr };
-      continue;
-    }
-
-    const xc = c.map((ci, i) => ci + rho * (worst.x[i] - ci));
-    const fc = f(xc);
-
-    if (fc < worst.fx) {
-      simplex[dim] = { x: xc, fx: fc };
-      continue;
-    }
-
-    for (let i = 1; i < simplex.length; i++) {
-      const xs = simplex[i].x.map(
-        (v, j) => best.x[j] + sigma * (v - best.x[j])
-      );
-      simplex[i] = { x: xs, fx: f(xs) };
-    }
-  }
-
-  simplex.sort((a, b) => a.fx - b.fx);
-  return simplex[0].x;
-}
-
-function snapPointsToFn(points, fn, xmin, xmax) {
-  return points.map((p) => {
-    const x = clamp(p.x, xmin, xmax);
-    const y = fn ? fn(x) : p.y;
-    return { ...p, x, y: isFiniteNum(y) ? y : 0 };
-  });
-}
-
-function fitRuleFromPoints(ruleMode, points, { polyDegree = 3 } = {}) {
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-
-  if (ruleMode === "free")
-    return { ok: true, equation: null, fn: null, message: null };
-
-  if (ruleMode === "linear") {
-    if (points.length < 2)
-      return { ok: false, message: "선형 규칙은 최소 2개 점이 필요합니다." };
-    const { a, b } = leastSquaresLinear(xs, ys);
-    const equation = `${fmtNum(a)}*x + ${fmtNum(b)}`;
-    const fn = (x) => a * x + b;
-    return { ok: true, equation, fn, message: null };
-  }
-
-  if (ruleMode === "poly") {
-    const d = Math.max(0, Math.floor(polyDegree));
-    const useD = Math.min(d, Math.max(0, points.length - 1));
-    const coeffs = fitPolyCoeffs(xs, ys, useD);
-    const equation = polyEquationFromCoeffs(coeffs);
-    const fn = coeffsToFn(coeffs);
-    return { ok: true, equation, fn, message: null };
-  }
-
-  const sse = (pred) => {
-    let e = 0;
-    for (let i = 0; i < xs.length; i++) {
-      const yhat = pred(xs[i]);
-      const r = (isFiniteNum(yhat) ? yhat : 0) - ys[i];
-      e += r * r;
-    }
-    return e;
-  };
-
-  if (ruleMode === "sin") {
-    if (points.length < 3)
-      return { ok: false, message: "사인 규칙은 최소 3개 점이 필요합니다." };
-    const yMin = Math.min(...ys),
-      yMax = Math.max(...ys);
-    const A0 = (yMax - yMin) / 2 || 1;
-    const C0 = (yMax + yMin) / 2 || 0;
-    const w0 = 1;
-    const p0 = 0;
-    const x0 = [A0, w0, p0, C0];
-
-    const f = (v) => {
-      const A = v[0],
-        w = Math.max(1e-6, Math.abs(v[1])),
-        phi = v[2],
-        C = v[3];
-      return sse((x) => A * Math.sin(w * x + phi) + C);
-    };
-    const [A, wRaw, phiRaw, C] = nelderMead(f, x0, { step: 0.35, maxIter: 90 });
-    const w = Math.max(1e-6, Math.abs(wRaw));
-    const phi = phiRaw;
-    const equation = `${fmtNum(A)}*sin(${fmtNum(w)}*x + ${fmtNum(
-      phi
-    )}) + ${fmtNum(C)}`;
-    const fn = (x) => A * Math.sin(w * x + phi) + C;
-    return { ok: true, equation, fn, message: null };
-  }
-
-  if (ruleMode === "exp") {
-    if (points.length < 3)
-      return { ok: false, message: "지수 규칙은 최소 3개 점이 필요합니다." };
-    const yMin = Math.min(...ys),
-      yMax = Math.max(...ys);
-    const C0 = yMin;
-    const A0 = yMax - yMin || 1;
-    const k0 = 0.3;
-    const x0 = [A0, k0, C0];
-
-    const f = (v) => {
-      const A = v[0],
-        k = v[1],
-        C = v[2];
-      return sse((x) => {
-        const z = clamp(k * x, -30, 30);
-        return A * Math.exp(z) + C;
-      });
-    };
-    const [A, k, C] = nelderMead(f, x0, { step: 0.25, maxIter: 90 });
-    const equation = `${fmtNum(A)}*exp(${fmtNum(k)}*x) + ${fmtNum(C)}`;
-    const fn = (x) => A * Math.exp(clamp(k * x, -30, 30)) + C;
-    return { ok: true, equation, fn, message: null };
-  }
-
-  if (ruleMode === "log") {
-    if (points.some((p) => p.x <= 0)) {
-      return {
-        ok: false,
-        message:
-          "로그 규칙은 x>0 범위에서만 동작합니다. (점의 x를 양수로 이동하세요.)",
-      };
-    }
-    const yMin = Math.min(...ys),
-      yMax = Math.max(...ys);
-    const A0 = yMax - yMin || 1;
-    const C0 = (yMax + yMin) / 2 || 0;
-    const k0 = 1;
-    const x0 = [A0, k0, C0];
-
-    const f = (v) => {
-      const A = v[0],
-        k = Math.max(1e-6, Math.abs(v[1])),
-        C = v[2];
-      return sse((x) => A * Math.log(k * x) + C);
-    };
-    const [A, kRaw, C] = nelderMead(f, x0, { step: 0.25, maxIter: 90 });
-    const k = Math.max(1e-6, Math.abs(kRaw));
-    const equation = `${fmtNum(A)}*log(${fmtNum(k)}*x) + ${fmtNum(C)}`;
-    const fn = (x) => A * Math.log(k * x) + C;
-    return { ok: true, equation, fn, message: null };
-  }
-
-  if (ruleMode === "power") {
-    if (points.some((p) => p.x <= 0)) {
-      return {
-        ok: false,
-        message:
-          "거듭제곱 규칙은 x>0 범위에서만 안정적으로 동작합니다. (점의 x를 양수로 이동하세요.)",
-      };
-    }
-    const yMin = Math.min(...ys),
-      yMax = Math.max(...ys);
-    const C0 = yMin;
-    const A0 = yMax - yMin || 1;
-    const p0 = 1;
-    const x0 = [A0, p0, C0];
-
-    const f = (v) => {
-      const A = v[0],
-        p = v[1],
-        C = v[2];
-      return sse((x) => A * x ** p + C);
-    };
-    const [A, p, C] = nelderMead(f, x0, { step: 0.25, maxIter: 100 });
-    const equation = `${fmtNum(A)}*x^(${fmtNum(p)}) + ${fmtNum(C)}`;
-    const fn = (x) => A * x ** p + C;
-    return { ok: true, equation, fn, message: null };
-  }
-
-  return { ok: false, message: "알 수 없는 규칙입니다." };
-}
 
 export default function Studio() {
   const location = useLocation();
@@ -800,64 +53,17 @@ export default function Studio() {
   const [vaultResources, setVaultResources] = useState([]);
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultError, setVaultError] = useState("");
-const sanitizeCurve3DForPersist = (c) => {
-  const src = c || {};
-  // ❌ 대용량/렌더링 캐시로 추정되는 필드들은 제거
-  const {
-    geometry,
-    mesh,
-    vertices,
-    indices,
-    normals,
-    positions,
-    points,
-    samples,     // 배열일 가능성
-    cached,
-    cache,
-    buffers,
-    ...rest
-  } = src;
-
-  return {
-    ...rest,
-    markers: cloneMarkers(src?.markers),
-  };
-};
-
-const sanitizeSurface3DForPersist = (s) => {
-  const src = s || {};
-  const {
-    geometry,
-    mesh,
-    vertices,
-    indices,
-    normals,
-    positions,
-    points,
-    samples,
-    grid,
-    cached,
-    cache,
-    buffers,
-    ...rest
-  } = src;
-
-  return {
-    ...rest,
-    markers: cloneMarkers(src?.markers),
-  };
-};
 
   const refreshVaultResources = useCallback(async () => {
     setVaultLoading(true);
     setVaultError("");
     try {
-      // full로 받아야 curve/surface/studio 이동에 필요한 필드가 충분함
+      // full???熬곣뫖利?猷몃뢾???curve/surface/studio ??????????썹땟???????썹땟???노꼥筌???쎛 ??롪퍓梨띄댚???
       const items = await api.listVaultItems({ view: "full" });
       const arr = Array.isArray(items) ? items : [];
       setVaultResources(arr);
 
-      // (선택) fallback 캐시
+      // (????ｋ?? fallback ?????
       try {
         localStorage.setItem("vaultResources", JSON.stringify(arr));
       } catch {}
@@ -865,7 +71,7 @@ const sanitizeSurface3DForPersist = (s) => {
       const msg = e?.message || String(e);
       setVaultError(msg);
 
-      // fallback: localStorage → dummy
+      // fallback: localStorage ??dummy
       try {
         const raw = localStorage.getItem("vaultResources");
         if (raw) {
@@ -880,7 +86,7 @@ const sanitizeSurface3DForPersist = (s) => {
       }
 
       if (Number(e?.status) === 401) {
-        // 필요하면 intro로 보내는 처리도 가능
+        // ????썹땟???????intro????⑤슢??????꿔꺂??節뉖き?????醫딆쓧???
         // navigate("/", { replace: true });
       }
     } finally {
@@ -892,20 +98,20 @@ const sanitizeSurface3DForPersist = (s) => {
     refreshVaultResources();
   }, [refreshVaultResources]);
 
-  // ✅ equation 타입만 필터링해서 LeftPanel "Equations" 섹션에 사용
+  // ??equation ??????怨룸섟 ????꾣뤃?饔낃퀣????좏뀴???LeftPanel "Equations" ???????????
   const equationsFromVault = useMemo(
     () => vaultResources.filter((r) => r.type === "equation"),
     [vaultResources]
   );
 
-  // 초기 탭 타입
+  // ?潁??용끏????????
   const rawType = location.state?.type ?? "equation";
   const initialType = rawType;
 
   const initialContent =
     initialType === "array3d" ? location.state?.content || [[[0]]] : null;
 
-  // Vault에서 온 경우인지 / 어떤 노트에서 왔는지
+  // Vault????????嚥▲굧????癲? / ??????癲ル슢?뤸뤃?꿔궘????????됰Ŧ?뉒뜏類ｋ쭫???됱삩?
   const fromVault = location.state?.from === "vault";
   const initialVaultId =
     fromVault &&
@@ -915,7 +121,7 @@ const sanitizeSurface3DForPersist = (s) => {
       ? location.state?.id ?? null
       : null;
 
-  // ✅ curve3d 초기 파라미터
+  // ??curve3d ?潁??용끏???????쀪쑴??嚥????
   const initialCurve3d =
     initialType === "curve3d"
       ? (() => {
@@ -967,7 +173,7 @@ const sanitizeSurface3DForPersist = (s) => {
         })()
       : undefined;
 
-  // ✅ surface3d 초기 파라미터
+  // ??surface3d ?潁??용끏???????쀪쑴??嚥????
   const initialSurface3d =
     initialType === "surface3d"
       ? {
@@ -1033,7 +239,7 @@ const sanitizeSurface3DForPersist = (s) => {
     []
   );
 
-  // 각 탭 상태에 vaultId를 추가
+  // ????????븐뻤???vaultId?????ㅻ쿋??
   const [tabState, setTabState] = useState(() => ({
     [firstTabId]: {
       type: initialType,
@@ -1071,7 +277,7 @@ const sanitizeSurface3DForPersist = (s) => {
     right: { ids: [], activeId: null },
   });
 
-  // ✅ 새로고침/탭닫기 시점에 최신 active tab을 가져오기 위한 ref
+  // ??????沅???쒙쭫?????嶺뚮Ŋ?띄낼???嶺뚮??????꿔꺂????쭍??active tab????醫딆쓧??癲ル슢???몄쒜嚥▲룗??????꾣뤃管逾?ref
   const panesRef = useRef(panes);
   const focusedPaneRef = useRef(focusedPane);
 
@@ -1082,7 +288,7 @@ const sanitizeSurface3DForPersist = (s) => {
     focusedPaneRef.current = focusedPane;
   }, [focusedPane]);
 
-  // 분할바 드래그
+  // ???곗뒩泳??怨ㅽ렫????嶺뚮Ĳ?됪뤃??
   const [leftPct, setLeftPct] = useState(55);
   const draggingRef = useRef(false);
 
@@ -1106,7 +312,7 @@ const sanitizeSurface3DForPersist = (s) => {
     };
   }, []);
 
-  // ── Undo/Redo: per-tab history ─────────────
+  // ???? Undo/Redo: per-tab history ??????????????????????????
   const tabStateRef = useRef(null);
   const tabsRef = useRef(null);
   const historyByTabRef = useRef({});
@@ -1126,7 +332,7 @@ const sanitizeSurface3DForPersist = (s) => {
     return map[tabId];
   }, []);
 
-  // ✅ Toolbar에서 “현재 undo/redo 가능 여부” 읽을 수 있도록 (부작용 없이)
+  // ??Toolbar????????????undo/redo ??醫딆쓧?????????????????????ㅻ덫??(???낇뀘???????????ㅼ굡??
   const getHistoryCounts = useCallback((tabId) => {
     const h = historyByTabRef.current?.[tabId];
     return {
@@ -1195,10 +401,10 @@ const sanitizeSurface3DForPersist = (s) => {
     };
   }, []);
 
-  // ── Vault persistence (backend) ────────────────────────────────────────────
+  // ???? Vault persistence (backend) ????????????????????????????????????????????????????????????????????????????????????????
   const isUnauthorized = (err) => Number(err?.status) === 401;
 
-  // ✅ vault PATCH 호환( apiClient에 patchVaultItem/patchVaultContent가 없으면 Studio에서 직접 호출 )
+  // ??vault PATCH ?癲ル슢?뤸뤃?? apiClient??patchVaultItem/patchVaultContent??醫딆쓧? ????ㅼ굡?類㎮뵾?Studio??????꿔꺂??????癲ル슢????)
 
   const vaultRequest = useCallback(
     async (path, { method = "PATCH", body } = {}) => {
@@ -1244,19 +450,19 @@ const sanitizeSurface3DForPersist = (s) => {
     [vaultRequest]
   );
 
-  // ✅ /content PATCH 호환 래퍼
-  // - apiClient.request / vaultRequest가 JSON.stringify를 담당하므로, 여기서 stringify 금지
-  // - api.patchVaultContent는 "raw content"를 넘기면 내부에서 {content: ...}로 래핑하도록 통일
+  // ??/content PATCH ?癲ル슢?뤸뤃??????쑩딂キ?
+  // - apiClient.request / vaultRequest??醫딆쓧? JSON.stringify??????????? ?????stringify ???궰???
+  // - api.patchVaultContent??"raw content"??????袁⑦꺙???????????{content: ...}??????쑩?럴???β뼯爰????????
   const patchVaultContentCompat = useCallback(
     async (itemId, content) => {
       if (!itemId) return;
 
       if (api?.patchVaultContent) {
-        // ✅ raw content만 전달 (이중 {content:{content:...}} 방지)
+        // ??raw content??????썹땟???(????ㅔ??{content:{content:...}} ?熬곣뫖?삥납?)
         return api.patchVaultContent(itemId, content);
       }
 
-      // ✅ fallback: 서버는 body에 content 키가 있으면 그 값을 content로 사용
+      // ??fallback: ??嶺뚮Ĳ?됭짆??body??content ??? ???繹먮겧嫄х솾?????醫딆┫???content??????
       return vaultRequest(`/api/v1/vault/items/${itemId}/content`, {
         method: "PATCH",
         body: { content },
@@ -1277,7 +483,7 @@ const sanitizeSurface3DForPersist = (s) => {
   setVaultResources((prev) => {
     const idx = prev.findIndex((n) => n.id === vaultId);
 
-    // ✅ 없으면 새로 생성해서 맨 앞에 삽입
+    // ??????ㅼ굡?類㎮뵾?????沅????꾩룆??????ㅻ샑筌??????β뼯爰녻キ???????
     if (idx === -1) {
       const created = {
         id: vaultId,
@@ -1328,7 +534,7 @@ const sanitizeSurface3DForPersist = (s) => {
     try {
       await patchVaultContentCompat(vaultId, content);
     } catch (err) {
-      // backend가 /content 엔드포인트를 제공하지 않는 경우 fallback
+      // backend??醫딆쓧? /content ???됰Ŧ??????癲? ???곌떽釉붾??? ?????놃닓 ?嚥▲굧????fallback
       if (Number(err?.status) === 404) {
         try {
           await patchVaultItemCompat(vaultId, { content });
@@ -1386,7 +592,7 @@ const sanitizeSurface3DForPersist = (s) => {
     };
   }, []);
 
-  // ✅ equation은 meta(formula)로만 저장한다. (/content는 호출하지 않음)
+  // ??equation?? meta(formula)?汝??吏??ㅻ㎦????嚥싳쇎紐??? (/content???癲ル슢?????? ????⑤９??
   const persistEquation = useCallback(
     (vaultId, payload) => {
       if (!vaultId) return;
@@ -1398,7 +604,7 @@ const sanitizeSurface3DForPersist = (s) => {
       const points = Array.isArray(payload?.points) ? payload.points : [];
       const content = buildEquationContent({ ...payload, points });
 
-      // 동일 payload 중복 저장 방지 (drag finalize/commitRule 등에서 중복 호출될 수 있음)
+      // ????怨뺣윞 payload 嚥싳쉶瑗??꾧틚???????熬곣뫖?삥납? (drag finalize/commitRule ?嚥싲갭큔????嚥싳쉶瑗??꾧틚???癲ル슢??????????繹먮굞??
       const sig =
         equation +
         "|" +
@@ -1412,18 +618,18 @@ const sanitizeSurface3DForPersist = (s) => {
       if (lastEqSaveSigRef.current[vaultId] === sig) return;
       lastEqSaveSigRef.current[vaultId] = sig;
 
-      // UI는 즉시 갱신 (optimistic)
-      // - equation의 그래프/포인트는 로컬 상태(content)에 유지하되,
-      //   서버에는 formula(meta)만 저장한다.
+      // UI???꿔꺂?ｉ뜮戮녹춹????醫딆┣???(optimistic)
+      // - equation?????녾컯嶺???????癲ル슢??蹂?쭍??汝??吏??놁뗀?????븐뻤??content)????????β뼯源닻?
+      //   ??嶺뚮Ĳ?됭짆?????formula(meta)?????嚥싳쇎紐???
       patchVaultLocal(vaultId, { formula: equation, content });
 
-      // 네트워크 저장은 비동기
+      // ?????됱뎽????ㅼ뒩??????? ??????熬곣뱭?
       void (async () => {
         try {
           await persistVaultMeta(vaultId, { formula: equation });
-          // ✅ equation은 /content 저장하지 않음
+          // ??equation?? /content ???嚥싳쇎紐??鶯? ????⑤９??
         } catch (err) {
-          // persistVaultMeta 내부에서 로깅/UNAUTHORIZED 처리
+          // persistVaultMeta ??????????汝??吏??UNAUTHORIZED ?꿔꺂??節뉖き??
         }
       })();
     },
@@ -1437,12 +643,12 @@ const persistCurve3D = useCallback(
     const traceId = `curve3d:${vaultId}:${Date.now()}`;
     const content = sanitizeCurve3DForPersist(curve3d);
 
-    // ✅ LeftPanel이 보는 top-level(x/y/z, tRange, samples 등)도 같이 갱신
+    // ??LeftPanel????⑤슢????top-level(x/y/z, tRange, samples ??????醫딆┻?????醫딆┣???
     const localPatch = {
       type: "curve3d",
       content,
       samples: content?.samples,
-      // 표시/검색/미니프리뷰용
+      // ??嶺?筌??嚥▲굧???????붺몭?겹럷?????썼キ?κ괌??????
       xExpr: content?.xExpr ?? content?.x,
       yExpr: content?.yExpr ?? content?.y,
       zExpr: content?.zExpr ?? content?.z,
@@ -1471,11 +677,11 @@ const persistCurve3D = useCallback(
 
         await persistVaultContent(vaultId, content);
 
-        // ✅ 서버 리스트를 다시 받아서(정렬/updatedAt 포함) 동기화
+        // ????嶺뚮Ĳ?됭짆???잙갭큔?딆뼍吏?癲? ????⑤베鍮??熬곣뫖利?猷몃뢾????癲ル슢??節??updatedAt ???? ?????ロ꺙??
         await refreshVaultResources();
 
-        // ✅ 서버가 top-level(x/y/z/expr)을 별도로 저장하지 않는 구조에서도
-        // LeftPanel 표시가 유지되도록 다시 한 번 로컬 패치
+        // ????嶺뚮Ĳ?됭짆??醫딆쓧? top-level(x/y/z/expr)????⑤슢?????븐쪎影??뱺????嚥싳쇎紐??鶯? ?????놃닓 ????源???????
+        // LeftPanel ??嶺?筌??醫딆쓧? ??????β뼯爰???????⑤베鍮??????汝??吏??놁뗀???濚??
         patchVaultLocal(vaultId, localPatch);
       } catch (err) {
         console.error("[studio] persistCurve3D failed", { traceId, vaultId, err });
@@ -1493,11 +699,11 @@ const persistSurface3D = useCallback(
     const traceId = `surface3d:${vaultId}:${Date.now()}`;
     const content = sanitizeSurface3DForPersist(surface3d);
 
-    // ✅ LeftPanel이 보는 top-level(expr/xMin/xMax/yMin/yMax 등)도 같이 갱신
+    // ??LeftPanel????⑤슢????top-level(expr/xMin/xMax/yMin/yMax ??????醫딆┻?????醫딆┣???
     const localPatch = {
       type: "surface3d",
       content,
-      // 표시/검색/미니프리뷰용
+      // ??嶺?筌??嚥▲굧???????붺몭?겹럷?????썼キ?κ괌??????
       expr: content?.expr ?? content?.zExpr ?? content?.formula,
       zExpr: content?.zExpr ?? content?.expr ?? content?.formula,
       formula: content?.formula ?? content?.expr ?? content?.zExpr,
@@ -1534,10 +740,10 @@ const persistSurface3D = useCallback(
 
         await persistVaultContent(vaultId, content);
 
-        // ✅ 서버 리스트 동기화
+        // ????嶺뚮Ĳ?됭짆???잙갭큔?딆뼍吏???????ロ꺙??
         await refreshVaultResources();
 
-        // ✅ 표시 유지용 재패치
+        // ????嶺?筌?????????壤굿?濡レ쑆?
         patchVaultLocal(vaultId, localPatch);
       } catch (err) {
         console.error("[studio] persistSurface3D failed", { traceId, vaultId, err });
@@ -1550,7 +756,7 @@ const persistSurface3D = useCallback(
 
 
 
-  // ✅ 새로고침/탭닫기 대비: keepalive 저장(요청이 끊기지 않도록)
+  // ??????沅???쒙쭫?????嶺뚮Ŋ?띄낼????? keepalive ???????됰Ŋ???????ш끽諭욥얠룊????? ?????노덫??
   const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080";
 
   const flushActiveTabSave = useCallback(() => {
@@ -1561,7 +767,7 @@ const persistSurface3D = useCallback(
     const s = tabStateRef.current?.[activeId];
     if (!s?.vaultId) return;
 
-    // ✅ /items PATCH는 서버 스펙 차이로 500이 날 수 있어 /content 저장으로 통일
+    // ??/items PATCH????嶺뚮Ĳ?됭짆??????깅굴 ?꿔꺂?볟젆怨곷븶??브퀣??굢?500??????????⑥ろ맖 /content ??????????????
     let content = null;
 
     if (s.type === "equation") {
@@ -1588,7 +794,7 @@ const persistSurface3D = useCallback(
 
     const token = localStorage.getItem("gm_token") || "";
 
-    // keepalive: 페이지 언로드 중에도 전송 시도(베스트 에포트)
+    // keepalive: ????볥궙?袁р뵾???? ?癲ル슢??遺룔뀋??嚥싳쉶瑗??꾧틡???????썹땟戮щ빝???嶺뚮㉡????筌??節꾪렭?????沃섃뫂??먯낄??
     try {
       fetch(`${API_BASE}/api/v1/vault/items/${s.vaultId}/content`, {
         method: "PATCH",
@@ -1662,7 +868,7 @@ const persistSurface3D = useCallback(
           });
           hist.redo.length = 0;
 
-          // ✅ vault 연결 탭이면 수식+그래프(points)까지 백엔드 저장
+          // ??vault ????쇰뮚???????レ탳????嶺뚮슣?쒙쭛????녾컯嶺???points)?μ떜媛?걫?? ?熬곣뫖利?????????
           if (txn.vaultId) {
             persistEquation(txn.vaultId, {
               equation: after.equation,
@@ -1763,7 +969,7 @@ const persistSurface3D = useCallback(
     return () => window.removeEventListener("mouseup", onMouseUp);
   }, [finalizeMoveTxn, scheduleFinalizeMoveTxn]);
 
-  // ✅ Vault localStorage + state 안 수식 업데이트
+  // ??Vault localStorage + state ????嶺뚮슣?쒙쭛??????욍걛???ш끽維??
   const updateVaultFormula = useCallback((vaultId, newEquation) => {
     if (!vaultId) return;
     setVaultResources((prev) => {
@@ -2007,7 +1213,7 @@ const persistSurface3D = useCallback(
             [tabId]: {
               ...st[tabId],
               points: pts,
-              ruleError: res.message ?? "규칙 적용 실패",
+              ruleError: res.message ?? "??????????쇨덫???????곌숯",
               ver: (st[tabId].ver ?? 0) + 1,
             },
           }));
@@ -2236,7 +1442,7 @@ const persistSurface3D = useCallback(
     [tabState, persistEquation, beginMoveTxn, scheduleFinalizeMoveTxn]
   );
 
-  // ── AI graph commands: extrema/roots/intersections → markers ─────────────────
+  // ???? AI graph commands: extrema/roots/intersections ??markers ??????????????????????????????????
   const sampleExtremum = (fn, xmin, xmax, samples = 2500, kind = "max") => {
     const lo = Number(xmin),
       hi = Number(xmax);
@@ -2468,7 +1674,7 @@ const persistSurface3D = useCallback(
                 kind: "intersection",
                 x,
                 y,
-                label: `∩ (${x.toFixed(2)}, ${y.toFixed(2)})`,
+                label: `??(${x.toFixed(2)}, ${y.toFixed(2)})`,
               });
             });
             continue;
@@ -2489,8 +1695,8 @@ const persistSurface3D = useCallback(
         return;
       }
 
-      // Curve3D / Surface3D AI 커맨드 로직은 원본 유지 (생략 없이 그대로 두었습니다)
-      // === 아래는 사용자가 올린 원본과 동일 ===
+      // Curve3D / Surface3D AI ??影?れ쉠????汝??吏?癒곕㎦?? ???雅???? (??嶺뚮ㅎ???????ㅼ굡?????녾컯嶺?????????????
+      // === ????썹땟????????? ???????雅??????怨뺣윞 ===
 
       if (tab.type === "curve3d") {
         const c3 = tab.curve3d || {};
@@ -2735,7 +1941,7 @@ const persistSurface3D = useCallback(
                 x: X,
                 y: Y,
                 z: Z,
-                label: `∩(${axis}) ${fmtXYZ(X, Y, Z)}`,
+                label: `??${axis}) ${fmtXYZ(X, Y, Z)}`,
               });
             });
             continue;
@@ -2894,7 +2100,7 @@ const persistSurface3D = useCallback(
                 x: p.x,
                 y: p.y,
                 z: p.z,
-                label: `root≈0 (${p.x.toFixed(2)}, ${p.y.toFixed(
+                label: `root?? (${p.x.toFixed(2)}, ${p.y.toFixed(
                   2
                 )}, ${p.z.toFixed(2)})`,
               });
@@ -2951,7 +2157,7 @@ const persistSurface3D = useCallback(
   const leftActive = leftActiveId ? tabState[leftActiveId] : null;
   const rightActive = rightActiveId ? tabState[rightActiveId] : null;
 
-  // 탭 ops
+  // ??ops
   const setActive = (paneKey, id) => {
     setPanes((s) => ({ ...s, [paneKey]: { ...s[paneKey], activeId: id } }));
     setFocusedPane(paneKey);
@@ -2976,96 +2182,11 @@ const persistSurface3D = useCallback(
       let surface3dInit = undefined;
 
       if (type === "curve3d") {
-        // Studio.jsx - createTab 내부 (type === "curve3d") 블록에서 payload~xExpr 부분 교체
-
-const root =
-  tabContent && typeof tabContent === "object"
-    ? tabContent
-    : raw && typeof raw === "object"
-    ? raw
-    : {};
-
-const c = root?.content && typeof root.content === "object" ? root.content : root;
-
-// ✅ content / legacy 키들 모두 커버
-const xExpr = c.x ?? c.xExpr ?? c.xExpr ?? c.x ?? "cos(t)";
-const yExpr = c.y ?? c.yExpr ?? c.yExpr ?? c.y ?? "sin(t)";
-const zExpr = c.z ?? c.zExpr ?? c.zExpr ?? c.z ?? "0";
-
-const tRange = c.tRange;
-const tMin = c.tMin ?? (Array.isArray(tRange) ? tRange[0] : undefined) ?? 0;
-const tMax = c.tMax ?? (Array.isArray(tRange) ? tRange[1] : undefined) ?? 2 * Math.PI;
-
-// ✅ samples 오타 보정: payload.sample 말고 samples 우선
-const samples = c.samples ?? c.sample ?? 400;
-
-const editMode = c.editMode ?? "drag";
-const baseXExpr = c.baseXExpr ?? xExpr;
-const baseYExpr = c.baseYExpr ?? yExpr;
-const baseZExpr = c.baseZExpr ?? zExpr;
-
-const markers = c.markers ?? [
-  { id: 0, t: tMin },
-  { id: 1, t: (tMin + tMax) / 2, label: "vertex" },
-  { id: 2, t: tMax },
-];
-
-curve3dInit = {
-  baseXExpr,
-  baseYExpr,
-  baseZExpr,
-  xExpr,
-  yExpr,
-  zExpr,
-  tMin,
-  tMax,
-  samples,
-  markers,
-  editMode,
-};
-
+        curve3dInit = buildCurve3DInitialState(raw, tabContent);
       }
 
       if (type === "surface3d") {
-        // Studio.jsx - createTab 내부 (type === "surface3d")
-
-const root =
-  tabContent && typeof tabContent === "object"
-    ? tabContent
-    : raw && typeof raw === "object"
-    ? raw
-    : {};
-
-const c = root?.content && typeof root.content === "object" ? root.content : root;
-
-const expr = c.expr ?? c.zExpr ?? c.formula ?? "sin(x) * cos(y)";
-
-const xRange = c.xRange;
-const yRange = c.yRange;
-
-const xMin = c.xMin ?? (Array.isArray(xRange) ? xRange[0] : undefined) ?? -5;
-const xMax = c.xMax ?? (Array.isArray(xRange) ? xRange[1] : undefined) ?? 5;
-const yMin = c.yMin ?? (Array.isArray(yRange) ? yRange[0] : undefined) ?? -5;
-const yMax = c.yMax ?? (Array.isArray(yRange) ? yRange[1] : undefined) ?? 5;
-
-const nx = c.nx ?? c.samplesX ?? 80;
-const ny = c.ny ?? c.samplesY ?? 80;
-
-surface3dInit = {
-  expr,
-  xMin,
-  xMax,
-  yMin,
-  yMax,
-  nx,
-  ny,
-  gridMode: c.gridMode ?? "major",
-  gridStep: c.gridStep ?? 1,
-  viewMode: c.viewMode ?? "both",
-  editMode: c.editMode ?? "drag",
-  minorDiv: c.minorDiv ?? 4,
-};
-
+        surface3dInit = buildSurface3DInitialState(raw, tabContent);
       }
 
       const title =
@@ -3183,7 +2304,7 @@ surface3dInit = {
     });
   };
 
-  // 탭 DnD
+  // ??DnD
   const [dragMeta, setDragMeta] = useState(null);
   const dragPreviewRef = useRef(null);
 
@@ -3291,7 +2412,7 @@ surface3dInit = {
     onTabDragEnd();
   };
 
-  // 활성 탭
+  // ??嶺?????
   const activeId = panes[focusedPane].activeId;
   const active = activeId ? tabState[activeId] : null;
   const activeEqPack =
@@ -3299,7 +2420,7 @@ surface3dInit = {
       ? deriveFor(activeId)
       : null;
 
-  // ✅ Toolbar가 읽을 수 있는 “현재 컨텍스트” (탭/패널/UndoRedo/카운트/Vault)
+  // ??Toolbar??醫딆쓧? ?????????????됲닓 ?????????????????됱뎽??(??????됰Þ??UndoRedo/??⑤㈇?????Vault)
   const activeTabMeta = useMemo(() => {
     if (!activeId || !active) return null;
 
@@ -3361,7 +2482,7 @@ surface3dInit = {
     vaultResources,
   ]);
 
-  // AIPanel에 전달하는 컨텍스트
+  // AIPanel??????썹땟?????β뼯爰귨㎘???????????됱뎽
   const currentContext = useMemo(() => {
     try {
       const paneKey = focusedPane;
@@ -3461,7 +2582,7 @@ surface3dInit = {
     activeUpdate({ xmax: num });
   };
 
-  // ✅ curve3d 상태 업데이트
+  // ??curve3d ????븐뻤???????욍걛???ш끽維??
   const updateCurve3D = useCallback(
     (tabId, patch) => {
       if (!tabId) return;
@@ -3476,7 +2597,7 @@ surface3dInit = {
             : typeof normalizedPatch,
         vaultId: tabStateRef.current?.[tabId]?.vaultId ?? null,
       });
-      // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
+      // markers drag / expr commit ??"????????됲닓 ??⑤슢堉???????嶺뚮??ｆ뤃??????txn??????ㅿ폎??before ????⑥쥓猷???癲ル슢???ъ쒜?
       if (
         patch &&
         typeof patch === "object" &&
@@ -3517,7 +2638,7 @@ surface3dInit = {
             hist.redo.length = 0;
           }
 
-          // ✅ vault 연결이면 backend 저장 (commit-like patch)
+          // ??vault ????쇰뮚??????backend ????(commit-like patch)
           if (txn.vaultId) persistCurve3D(txn.vaultId, nextCurve3d);
 
           dragTxnRef.current = null;
@@ -3529,7 +2650,7 @@ surface3dInit = {
     [beginCurve3DTxn, ensureHistory, persistCurve3D]
   );
 
-  // ✅ surface3d 상태 업데이트
+  // ??surface3d ????븐뻤???????욍걛???ш끽維??
   const updateSurface3D = useCallback(
     (tabId, patch) => {
       if (!tabId) return;
@@ -3544,7 +2665,7 @@ surface3dInit = {
             : typeof normalizedPatch,
         vaultId: tabStateRef.current?.[tabId]?.vaultId ?? null,
       });
-      // markers drag / expr commit 등 "의미있는 변경"이 시작되면 txn을 열어 before 스냅샷 확보
+      // markers drag / expr commit ??"????????됲닓 ??⑤슢堉???????嶺뚮??ｆ뤃??????txn??????ㅿ폎??before ????⑥쥓猷???癲ル슢???ъ쒜?
       if (
         patch &&
         typeof patch === "object" &&
@@ -3589,7 +2710,7 @@ surface3dInit = {
             hist.redo.length = 0;
           }
 
-          // ✅ vault 연결이면 backend 저장 (commit-like patch)
+          // ??vault ????쇰뮚??????backend ????(commit-like patch)
           if (txn.vaultId) persistSurface3D(txn.vaultId, nextSurface3d);
 
           dragTxnRef.current = null;
@@ -3608,7 +2729,7 @@ surface3dInit = {
     const equation = normalizeFormula(active.equation);
     const fn = exprToFn(equation);
 
-    // 탭 제목 갱신
+    // ????嶺뚮Ŋ猷꾥굜???醫딆┣???
     setTabs((t) => ({
       ...t,
       byId: {
@@ -3620,7 +2741,7 @@ surface3dInit = {
       },
     }));
 
-    // points 재계산 + 저장 payload 준비
+    // points ?????+ ????payload 嚥싳쉶瑗ц짆堉샕??
     const s = tabStateRef.current?.[activeId];
     if (!s || s.type !== "equation") return;
 
@@ -3653,7 +2774,7 @@ surface3dInit = {
       };
     });
 
-    // ✅ vault 연결 탭이면 백엔드까지 저장
+    // ??vault ????쇰뮚???????レ탳???熬곣뫖利??????곌퇈猷쀯쭔??꿔꺂??? ????
     if (s.vaultId) {
       persistEquation(s.vaultId, {
         equation,
@@ -3730,7 +2851,7 @@ surface3dInit = {
               e.stopPropagation();
               onTabClickSendOther(id, paneKey);
             }}
-            title="드래그하거나 우클릭해서 반대편으로 보내기"
+            title="Drag to reorder or right-click to move to the other pane"
           >
             <span className="tab-title">
               {tabs.byId[id]?.title ?? "Untitled"}
@@ -3742,7 +2863,7 @@ surface3dInit = {
                 closeTab(paneKey, id);
               }}
             >
-              ×
+              ??
             </button>
           </div>
         ))}
@@ -3812,14 +2933,14 @@ surface3dInit = {
             }
 
             if (res.type === "curve3d") {
-              const payload = res?.content ?? res; // ✅ 핵심
+              const payload = res?.content ?? res; // ???????
   createTab(payload, "left", "curve3d", payload, res.title, vid); 
             } else if (res.type === "equation") {
               createTab(res.formula, "left", "equation", null, res.title, vid);
             } else if (res.type === "array3d") {
               createTab(null, "left", "array3d", res.content, res.title, vid);
             } else if (res.type === "surface3d") {
-               const payload = res?.content ?? res?.surface3d ?? res; // ✅ 핵심
+               const payload = res?.content ?? res?.surface3d ?? res; // ???????
   createTab(payload, "left", "surface3d", payload, res.title, vid);
             }
           }}
@@ -3827,10 +2948,10 @@ surface3dInit = {
       )}
 
       <div className="studio-main">
-        {/* 상단 Toolbar 영역 */}
+        {/* ????욱룏??Toolbar ????쇨덧??*/}
         {active && active.type === "equation" ? (
           <Toolbar
-            // 기존 props
+            // ???뚯????props
             equationExpr={active.equation}
             setEquationExpr={setEquationExprWrapped}
             onApply={applyEquation}
@@ -3856,7 +2977,7 @@ surface3dInit = {
             ruleError={activeEqPack?.ruleError}
             showLeftPanel={showLeftPanel}
             onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}
-            // ✅ 추가: Toolbar가 “현재 상태” 읽을 수 있도록
+            // ?????ㅻ쿋??: Toolbar??醫딆쓧? ???????????븐뻤????????????????ㅻ덫??
             context={activeTabMeta}
             onUndo={undoMove}
             onRedo={redoMove}
@@ -3870,7 +2991,7 @@ surface3dInit = {
             setThreshold={setArrayThreshold}
             axisOrder={arrayAxisOrder}
             setAxisOrder={setArrayAxisOrder}
-            // ✅ 추가: 컨텍스트/undo/redo/좌패널 토글
+            // ?????ㅻ쿋??: ??????????됱뎽/undo/redo/????裕??????
             context={activeTabMeta}
             onUndo={undoMove}
             onRedo={redoMove}
@@ -3884,7 +3005,7 @@ surface3dInit = {
             onApply={(patch) => updateCurve3D(activeId, patch)}
             showLeftPanel={showLeftPanel}
             onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}
-            // ✅ 추가
+            // ?????ㅻ쿋??
             context={activeTabMeta}
             onUndo={undoMove}
             onRedo={redoMove}
@@ -3894,7 +3015,7 @@ surface3dInit = {
             surface3d={active.surface3d}
             onChange={(patch) => updateSurface3D(activeId, patch)}
             onApply={(patch) => updateSurface3D(activeId, patch)}
-            // ✅ 추가: 좌패널 토글 + 컨텍스트/undo/redo
+            // ?????ㅻ쿋??: ????裕?????? + ??????????됱뎽/undo/redo
             showLeftPanel={showLeftPanel}
             onToggleLeftPanel={() => setShowLeftPanel((v) => !v)}
             context={activeTabMeta}
@@ -3904,7 +3025,7 @@ surface3dInit = {
         ) : null}
 
         <div className={`vscode-split-root ${isSplit ? "is-split" : ""}`}>
-          {/* 왼쪽 Pane */}
+          {/* ???リ옇?ユ뤃?Pane */}
           <div
             className="pane"
             style={{ width: isSplit ? `${leftPct}%` : "100%" }}
@@ -3943,7 +3064,7 @@ surface3dInit = {
                     showControls={true}
                   />
                 ) : (
-                  <div className="empty-hint">왼쪽에 열린 탭이 없습니다.</div>
+                  <div className="empty-hint">???リ옇?ユ뤃???????????????ㅿ폍??????딅젩.</div>
                 )
               ) : leftActive && leftActive.type === "array3d" ? (
                 <Array3DView
@@ -3966,21 +3087,21 @@ surface3dInit = {
                   onChange={(patch) => updateSurface3D(leftActiveId, patch)}
                 />
               ) : (
-                <div className="empty-hint">왼쪽에 열린 탭이 없습니다.</div>
+                <div className="empty-hint">???リ옇?ユ뤃???????????????ㅿ폍??????딅젩.</div>
               )}
             </div>
           </div>
 
-          {/* 분할바 */}
+          {/* ???곗뒩泳??怨ㅽ렫??*/}
           {isSplit && (
             <div
               className="divider"
               onMouseDown={() => (draggingRef.current = true)}
-              title="드래그해서 크기 조절"
+              title="Drag to resize"
             />
           )}
 
-          {/* 오른쪽 Pane */}
+          {/* ?????봔饔낃퀣??Pane */}
           {isSplit ? (
             <div className="pane" style={{ width: `${100 - leftPct}%` }}>
               <div
@@ -4025,12 +3146,12 @@ surface3dInit = {
                       />
                     ) : (
                       <div className="empty-hint">
-                        상단의 탭을 이 영역으로 드래그하면 오른쪽 화면으로
-                        이동합니다.
+                        ????욱룏?????????????쇨덧?????Β????嶺뚮Ĳ?됪뤃???녾컯嶺????鶯??????봔饔낃퀣?????됰Ŧ六?????Β??
+                        ??????嶺뚮ㅎ????
                       </div>
                     )
                   ) : rightActive && rightActive.type === "array3d" ? (
-                    // ✅ BUGFIX: rightActive.content 사용
+                    // ??BUGFIX: rightActive.content ????
                     <Array3DView
                       data={rightActive.content}
                       threshold={arrayThreshold}
@@ -4056,8 +3177,8 @@ surface3dInit = {
                     />
                   ) : (
                     <div className="empty-hint">
-                      상단의 탭을 이 영역으로 드래그하면 오른쪽 화면으로
-                      이동합니다.
+                      ????욱룏?????????????쇨덧?????Β????嶺뚮Ĳ?됪뤃???녾컯嶺????鶯??????봔饔낃퀣?????됰Ŧ六?????Β??
+                      ??????嶺뚮ㅎ????
                     </div>
                   )}
                 </div>
@@ -4070,7 +3191,7 @@ surface3dInit = {
               onDragOver={onRightDropOver}
               onDragLeave={onDropZoneLeave}
               onDrop={onRightDrop}
-              title="여기로 드롭하면 화면이 분할됩니다"
+              title="Drop here to split the view"
             />
           )}
         </div>

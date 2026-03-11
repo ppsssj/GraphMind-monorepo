@@ -7,6 +7,106 @@ import NewResourceModal from "../components/NewResourceModal";
 import "../styles/Vault.css";
 import { api } from "../api/apiClient";
 
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function buildStudioState(note) {
+  if (!note) return null;
+
+  const content = note.type === "array3d" ? note.content : asObject(note.content);
+
+  if (note.type === "equation") {
+    return {
+      type: "equation",
+      id: note.id,
+      title: note.title,
+      formula: note.formula ?? note.expr ?? "x",
+      from: "vault",
+    };
+  }
+
+  if (note.type === "array3d") {
+    return {
+      type: "array3d",
+      id: note.id,
+      title: note.title,
+      content: Array.isArray(content) ? content : [[[0]]],
+      from: "vault",
+    };
+  }
+
+  if (note.type === "curve3d") {
+    const tRange = Array.isArray(content.tRange)
+      ? content.tRange
+      : Array.isArray(note.tRange)
+      ? note.tRange
+      : [];
+
+    return {
+      type: "curve3d",
+      id: note.id,
+      title: note.title,
+      from: "vault",
+      curve3d: {
+        xExpr: content.xExpr ?? content.x ?? note.xExpr ?? note.x ?? "cos(t)",
+        yExpr: content.yExpr ?? content.y ?? note.yExpr ?? note.y ?? "sin(t)",
+        zExpr: content.zExpr ?? content.z ?? note.zExpr ?? note.z ?? "0",
+        tMin: content.tMin ?? note.tMin ?? tRange[0] ?? 0,
+        tMax: content.tMax ?? note.tMax ?? tRange[1] ?? 2 * Math.PI,
+        samples: content.samples ?? note.samples ?? 400,
+        markers: Array.isArray(content.markers) ? content.markers : undefined,
+        editMode: content.editMode ?? note.editMode,
+        baseXExpr: content.baseXExpr ?? note.baseXExpr,
+        baseYExpr: content.baseYExpr ?? note.baseYExpr,
+        baseZExpr: content.baseZExpr ?? note.baseZExpr,
+      },
+    };
+  }
+
+  if (note.type === "surface3d") {
+    const xRange = Array.isArray(content.xRange)
+      ? content.xRange
+      : Array.isArray(note.xRange)
+      ? note.xRange
+      : [];
+    const yRange = Array.isArray(content.yRange)
+      ? content.yRange
+      : Array.isArray(note.yRange)
+      ? note.yRange
+      : [];
+
+    return {
+      type: "surface3d",
+      id: note.id,
+      title: note.title,
+      from: "vault",
+      surface3d: {
+        expr:
+          content.expr ??
+          content.zExpr ??
+          content.formula ??
+          note.expr ??
+          note.zExpr ??
+          note.formula ??
+          "sin(x)*cos(y)",
+        xMin: content.xMin ?? note.xMin ?? xRange[0] ?? -5,
+        xMax: content.xMax ?? note.xMax ?? xRange[1] ?? 5,
+        yMin: content.yMin ?? note.yMin ?? yRange[0] ?? -5,
+        yMax: content.yMax ?? note.yMax ?? yRange[1] ?? 5,
+        nx: content.nx ?? content.samples ?? note.samples ?? note.samplesX ?? 80,
+        ny: content.ny ?? content.samples ?? note.samples ?? note.samplesY ?? 80,
+        markers: Array.isArray(content.markers) ? content.markers : undefined,
+        gridMode: content.gridMode ?? note.gridMode,
+        gridStep: content.gridStep ?? note.gridStep,
+        minorDiv: content.minorDiv ?? note.minorDiv,
+      },
+    };
+  }
+
+  return null;
+}
+
 export default function Vault() {
   const navigate = useNavigate();
 
@@ -27,7 +127,7 @@ export default function Vault() {
       setError("");
 
       // ✅ studio 이동에 필요한 필드까지 포함하려면 full 권장
-      const items = await api.listVaultItems();
+      const items = await api.listVaultItems({ view: "full" });
 
       setNotes(Array.isArray(items) ? items : []);
       setActiveId(items?.[0]?.id ?? null);
@@ -54,81 +154,18 @@ export default function Vault() {
     [notes, activeId]
   );
 
-  const handleOpenStudio = (id) => {
-    const note = notes.find((n) => n.id === id);
-    if (!note) return;
-
-    if (note.type === "equation") {
-      navigate("/studio", {
-        state: {
-          type: "equation",
-          formula: note.formula ?? note.expr ?? "x",
-          from: "vault",
-          id: note.id,
-        },
-      });
-      return;
-    }
-
-    if (note.type === "array3d") {
-      navigate("/studio", {
-        state: {
-          type: "array3d",
-          content: note.content,
-          from: "vault",
-          id: note.id,
-        },
-      });
-      return;
-    }
-
-    if (note.type === "curve3d") {
-      navigate("/studio", {
-        state: {
-          type: "curve3d",
-          id: note.id,
-          title: note.title,
-          from: "vault",
-          curve3d: {
-            xExpr: note.xExpr ?? note.x,
-            yExpr: note.yExpr ?? note.y,
-            zExpr: note.zExpr ?? note.z,
-            tMin: note.tMin ?? (note.tRange ? note.tRange[0] : undefined),
-            tMax: note.tMax ?? (note.tRange ? note.tRange[1] : undefined),
-            samples: note.samples,
-          },
-        },
-      });
-      return;
-    }
-
-    if (note.type === "surface3d") {
-      const xRange = note.xRange || [];
-      const yRange = note.yRange || [];
-      const xMin = note.xMin ?? xRange[0] ?? -5;
-      const xMax = note.xMax ?? xRange[1] ?? 5;
-      const yMin = note.yMin ?? yRange[0] ?? -5;
-      const yMax = note.yMax ?? yRange[1] ?? 5;
-
-      navigate("/studio", {
-        state: {
-          type: "surface3d",
-          id: note.id,
-          title: note.title,
-          from: "vault",
-          surface3d: {
-            expr: note.expr ?? note.zExpr ?? note.formula ?? "sin(x)*cos(y)",
-            xMin,
-            xMax,
-            yMin,
-            yMax,
-            nx: note.samples ?? note.samplesX ?? 80,
-            ny: note.samples ?? note.samplesY ?? 80,
-          },
-        },
-      });
-    }
-  };
+  const handleOpenStudio = useCallback(
+    (target) => {
+      const note =
+        typeof target === "string"
+          ? notes.find((item) => item.id === target)
+          : target;
+      const state = buildStudioState(note);
+      if (!state) return;
+      navigate("/studio", { state });
+    },
+    [navigate, notes]
+  );
 
   // ✅ 생성: NewResourceModal → 서버에 POST → 목록 갱신
   const onCreateResource = async (payload) => {
@@ -143,6 +180,7 @@ export default function Vault() {
         formula,
         tags,
         content,
+        dims,
         x,
         y,
         z,
@@ -165,25 +203,41 @@ export default function Vault() {
       if (resolvedType === "equation") {
         body.formula = formula || "x^2+1";
       } else if (resolvedType === "curve3d") {
-        body.xExpr = x || "cos(t)";
-        body.yExpr = y || "sin(t)";
-        body.zExpr = z || "t";
-        body.tMin = Array.isArray(tRange) ? tRange[0] : 0;
-        body.tMax = Array.isArray(tRange) ? tRange[1] : 2 * Math.PI;
+        const safeTRange =
+          Array.isArray(tRange) && tRange.length === 2 ? tRange : [0, 2 * Math.PI];
+        body.content = {
+          xExpr: x || "cos(t)",
+          yExpr: y || "sin(t)",
+          zExpr: z || "t",
+          tMin: safeTRange[0],
+          tMax: safeTRange[1],
+          tRange: safeTRange,
+          samples: samples ?? 400,
+        };
         body.samples = samples ?? 400;
       } else if (resolvedType === "surface3d") {
         const xr =
           Array.isArray(xRange) && xRange.length === 2 ? xRange : [-5, 5];
         const yr =
           Array.isArray(yRange) && yRange.length === 2 ? yRange : [-5, 5];
-        body.expr = formula || "sin(x)*cos(y)";
-        body.xMin = xr[0];
-        body.xMax = xr[1];
-        body.yMin = yr[0];
-        body.yMax = yr[1];
+        body.content = {
+          expr: formula || "sin(x)*cos(y)",
+          xMin: xr[0],
+          xMax: xr[1],
+          yMin: yr[0],
+          yMax: yr[1],
+          xRange: xr,
+          yRange: yr,
+          nx: samples ?? 80,
+          ny: samples ?? 80,
+          samples: samples ?? 80,
+        };
         body.samples = samples ?? 80;
       } else if (resolvedType === "array3d") {
         body.content = content || [[[0]]];
+        body.sizeX = dims?.x;
+        body.sizeY = dims?.y;
+        body.sizeZ = dims?.z;
       }
 
       const created = await api.createVaultItem(body);
@@ -198,7 +252,7 @@ export default function Vault() {
       setFocusTick((t) => t + 1);
 
       // 생성 후 바로 Studio 이동(기존 UX 유지)
-      if (created?.id) handleOpenStudio(created.id);
+      if (created?.id) handleOpenStudio(created);
     } catch (e) {
       const msg = e?.message || String(e);
       setError(msg);
